@@ -3,18 +3,25 @@ import * as XLSX from 'xlsx';
 
 const FilesContext = createContext(null);
 
-// Функции для работы с IndexedDB для хранения оригинальных файлов
+// Функции для работы с IndexedDB для хранения оригинальных файлов и данных рейсов
 const openDB = () => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('SamairFilesDB', 1);
+    const request = indexedDB.open('SamairFilesDB', 2); // Увеличиваем версию
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
+
+      // Создаем хранилище для файлов
       if (!db.objectStoreNames.contains('files')) {
         db.createObjectStore('files', { keyPath: 'id' });
+      }
+
+      // Создаем хранилище для данных рейсов
+      if (!db.objectStoreNames.contains('flightData')) {
+        db.createObjectStore('flightData', { keyPath: 'id' });
       }
     };
   });
@@ -130,17 +137,93 @@ const deleteFileFromIndexedDB = async (fileId) => {
   }
 };
 
+// Функции для работы с данными рейсов в IndexedDB
+const saveFlightDataToIndexedDB = async (flightData) => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(['flightData'], 'readwrite');
+    const store = transaction.objectStore('flightData');
+
+    return new Promise((resolve, reject) => {
+      const request = store.put({
+        id: 'flightData',
+        data: flightData,
+        timestamp: Date.now()
+      });
+
+      request.onerror = () => {
+        console.error('Ошибка IndexedDB при сохранении данных рейсов:', request.error);
+        reject(request.error);
+      };
+
+      request.onsuccess = () => {
+        console.log(`Данные рейсов сохранены в IndexedDB: ${flightData.length} записей`);
+        resolve();
+      };
+
+      transaction.onerror = () => {
+        console.error('Ошибка транзакции IndexedDB при сохранении данных рейсов:', transaction.error);
+        reject(transaction.error);
+      };
+    });
+  } catch (error) {
+    console.error('Ошибка при сохранении данных рейсов в IndexedDB:', error);
+    throw error;
+  }
+};
+
+const getFlightDataFromIndexedDB = async () => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(['flightData'], 'readonly');
+    const store = transaction.objectStore('flightData');
+
+    return new Promise((resolve, reject) => {
+      const request = store.get('flightData');
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result.data);
+        } else {
+          resolve([]);
+        }
+      };
+    });
+  } catch (error) {
+    console.error('Ошибка при получении данных рейсов из IndexedDB:', error);
+    return [];
+  }
+};
+
+const clearFlightDataFromIndexedDB = async () => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(['flightData'], 'readwrite');
+    const store = transaction.objectStore('flightData');
+
+    return new Promise((resolve, reject) => {
+      const request = store.clear();
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  } catch (error) {
+    console.error('Ошибка при очистке данных рейсов из IndexedDB:', error);
+    throw error;
+  }
+};
+
 export const FilesProvider = ({ children }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [flightData, setFlightData] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Загружаем файлы и данные рейсов из localStorage при инициализации
+  // Загружаем файлы и данные рейсов при инициализации
   useEffect(() => {
     const loadData = async () => {
+      // Загружаем метаинформацию о файлах из localStorage
       const savedFiles = localStorage.getItem('uploadedFiles');
-      const savedFlightData = localStorage.getItem('flightData');
-
       if (savedFiles) {
         try {
           const parsedFiles = JSON.parse(savedFiles);
@@ -151,14 +234,34 @@ export const FilesProvider = ({ children }) => {
         }
       }
 
-      if (savedFlightData) {
-        try {
-          const parsedFlightData = JSON.parse(savedFlightData);
-          setFlightData(parsedFlightData);
-          console.log('Данные рейсов загружены из localStorage:', parsedFlightData);
-        } catch (error) {
-          console.error('Ошибка при загрузке данных рейсов из localStorage:', error);
+      // Миграция данных рейсов из localStorage в IndexedDB
+      try {
+        const oldFlightData = localStorage.getItem('flightData');
+        if (oldFlightData) {
+          console.log('Найдены старые данные рейсов в localStorage, переносим в IndexedDB...');
+          try {
+            const parsedOldData = JSON.parse(oldFlightData);
+            if (parsedOldData && parsedOldData.length > 0) {
+              await saveFlightDataToIndexedDB(parsedOldData);
+              setFlightData(parsedOldData);
+              console.log('Данные рейсов перенесены из localStorage в IndexedDB:', parsedOldData.length);
+            }
+          } catch (parseError) {
+            console.error('Ошибка парсинга старых данных рейсов:', parseError);
+          }
+          // Удаляем старые данные из localStorage
+          localStorage.removeItem('flightData');
+          console.log('Старые данные рейсов удалены из localStorage');
+        } else {
+          // Загружаем данные рейсов из IndexedDB
+          const flightDataFromDB = await getFlightDataFromIndexedDB();
+          if (flightDataFromDB && flightDataFromDB.length > 0) {
+            setFlightData(flightDataFromDB);
+            console.log('Данные рейсов загружены из IndexedDB:', flightDataFromDB.length);
+          }
         }
+      } catch (error) {
+        console.error('Ошибка при миграции/загрузке данных рейсов:', error);
       }
 
       // Загружаем файлы из почты
@@ -177,16 +280,21 @@ export const FilesProvider = ({ children }) => {
   // Сохраняем файлы в localStorage при изменении (только после загрузки)
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem('uploadedFiles', JSON.stringify(uploadedFiles));
-      console.log('Файлы сохранены в localStorage:', uploadedFiles);
+      try {
+        localStorage.setItem('uploadedFiles', JSON.stringify(uploadedFiles));
+        console.log('Файлы сохранены в localStorage:', uploadedFiles);
+      } catch (error) {
+        console.error('Ошибка сохранения файлов в localStorage:', error);
+      }
     }
   }, [uploadedFiles, isLoaded]);
 
-  // Сохраняем данные рейсов в localStorage при изменении (только после загрузки)
+  // Сохраняем данные рейсов в IndexedDB при изменении (только после загрузки)
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('flightData', JSON.stringify(flightData));
-      console.log('Данные рейсов сохранены в localStorage:', flightData);
+    if (isLoaded && flightData.length > 0) {
+      saveFlightDataToIndexedDB(flightData).catch(error => {
+        console.error('Ошибка сохранения данных рейсов в IndexedDB:', error);
+      });
     }
   }, [flightData, isLoaded]);
 
@@ -494,6 +602,9 @@ export const FilesProvider = ({ children }) => {
       for (const file of uploadedFiles) {
         await deleteFileFromIndexedDB(file.id);
       }
+
+      // Очищаем данные рейсов из IndexedDB
+      await clearFlightDataFromIndexedDB();
     } catch (error) {
       console.error('Ошибка при очистке IndexedDB:', error);
     }

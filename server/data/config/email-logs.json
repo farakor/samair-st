@@ -1,0 +1,79 @@
+[
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:09:24.419Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:08:17.974Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:04:49.985Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:04:34.966Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:00:20.685Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T20:00:08.602Z"
+  },
+  {
+    "type": "success",
+    "message": "Обработано писем: 2, найдено файлов: 0",
+    "details": {
+      "totalEmails": 2,
+      "totalFiles": 0,
+      "processedFiles": [],
+      "errors": []
+    },
+    "timestamp": "2025-07-17T19:59:40.853Z"
+  }
+]
