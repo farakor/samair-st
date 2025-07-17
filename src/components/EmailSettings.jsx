@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,6 +15,30 @@ export default function EmailSettings() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const { canAccessUpload } = useAuth();
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/email-config');
+      if (response.ok) {
+        const data = await response.json();
+        if (data && Object.keys(data).length > 0) {
+          setConfig(prevConfig => ({
+            ...prevConfig,
+            ...data
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке конфигурации:', error);
+    }
+  }, []);
+
+  // Загружаем текущую конфигурацию при монтировании
+  useEffect(() => {
+    if (canAccessUpload()) {
+      loadConfig();
+    }
+  }, [canAccessUpload, loadConfig]);
 
   // Проверяем права доступа
   if (!canAccessUpload()) {
@@ -34,27 +58,7 @@ export default function EmailSettings() {
     );
   }
 
-  // Загружаем текущую конфигурацию при монтировании
-  useEffect(() => {
-    loadConfig();
-  }, []);
 
-  const loadConfig = async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/email-config');
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Object.keys(data).length > 0) {
-          setConfig(prevConfig => ({
-            ...prevConfig,
-            ...data
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке конфигурации:', error);
-    }
-  };
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -151,8 +155,8 @@ export default function EmailSettings() {
         {/* Сообщения */}
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${messageType === 'success'
-              ? 'bg-green-100 border border-green-300 text-green-700'
-              : 'bg-red-100 border border-red-300 text-red-700'
+            ? 'bg-green-100 border border-green-300 text-green-700'
+            : 'bg-red-100 border border-red-300 text-red-700'
             }`}>
             <p className="font-medium">{messageType === 'success' ? 'Успех!' : 'Ошибка!'}</p>
             <p className="text-sm mt-1">{message}</p>

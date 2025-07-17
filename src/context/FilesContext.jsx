@@ -218,10 +218,45 @@ export const FilesProvider = ({ children }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [flightData, setFlightData] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [useDatabase, setUseDatabase] = useState(true); // Флаг использования PostgreSQL
 
   // Загружаем файлы и данные рейсов при инициализации
   useEffect(() => {
     const loadData = async () => {
+      if (useDatabase) {
+        // Загружаем данные из PostgreSQL
+        try {
+          console.log('Загружаем данные из PostgreSQL...');
+
+          // Загружаем файлы
+          const filesResponse = await fetch('http://localhost:3001/api/files');
+          if (filesResponse.ok) {
+            const files = await filesResponse.json();
+            setUploadedFiles(files);
+            console.log('Файлы загружены из PostgreSQL:', files.length);
+          }
+
+          // Загружаем данные рейсов
+          const flightsResponse = await fetch('http://localhost:3001/api/flight-data');
+          if (flightsResponse.ok) {
+            const flights = await flightsResponse.json();
+            setFlightData(flights);
+            console.log('Данные рейсов загружены из PostgreSQL:', flights.length);
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки из PostgreSQL, переходим на локальное хранение:', error);
+          setUseDatabase(false);
+          // Fallback к старой логике
+          await loadFromLocalStorage();
+        }
+      } else {
+        await loadFromLocalStorage();
+      }
+
+      setIsLoaded(true);
+    };
+
+    const loadFromLocalStorage = async () => {
       // Загружаем метаинформацию о файлах из localStorage
       const savedFiles = localStorage.getItem('uploadedFiles');
       if (savedFiles) {
@@ -270,12 +305,10 @@ export const FilesProvider = ({ children }) => {
       } catch (error) {
         console.error('Ошибка при загрузке файлов из почты:', error);
       }
-
-      setIsLoaded(true);
     };
 
     loadData();
-  }, []);
+  }, [useDatabase]);
 
   // Сохраняем файлы в localStorage при изменении (только после загрузки)
   useEffect(() => {
@@ -289,14 +322,20 @@ export const FilesProvider = ({ children }) => {
     }
   }, [uploadedFiles, isLoaded]);
 
-  // Сохраняем данные рейсов в IndexedDB при изменении (только после загрузки)
+  // Сохраняем данные рейсов (в PostgreSQL или IndexedDB)
   useEffect(() => {
     if (isLoaded && flightData.length > 0) {
-      saveFlightDataToIndexedDB(flightData).catch(error => {
-        console.error('Ошибка сохранения данных рейсов в IndexedDB:', error);
-      });
+      if (useDatabase) {
+        // Для PostgreSQL данные сохраняются через API при добавлении
+        console.log('Данные рейсов в PostgreSQL управляются через API');
+      } else {
+        // Fallback к IndexedDB
+        saveFlightDataToIndexedDB(flightData).catch(error => {
+          console.error('Ошибка сохранения данных рейсов в IndexedDB:', error);
+        });
+      }
     }
-  }, [flightData, isLoaded]);
+  }, [flightData, isLoaded, useDatabase]);
 
   // Функция для форматирования размера файла
   const formatFileSize = (bytes) => {
@@ -526,6 +565,29 @@ export const FilesProvider = ({ children }) => {
         fileInfo.status = 'completed';
         fileInfo.flightsCount = flights.length;
         console.log(`Файл ${file.name} успешно обработан`);
+
+        // Сохраняем в PostgreSQL если доступно
+        if (useDatabase) {
+          try {
+            // Сохраняем файл в базу
+            await fetch('http://localhost:3001/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileInfo })
+            });
+
+            // Сохраняем данные рейсов в базу
+            await fetch('http://localhost:3001/api/flight-data', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ flights })
+            });
+
+            console.log(`Файл и данные рейсов сохранены в PostgreSQL`);
+          } catch (dbError) {
+            console.error('Ошибка сохранения в PostgreSQL:', dbError);
+          }
+        }
       } catch (error) {
         console.error(`Ошибка при обработке файла ${file.name}:`, error);
         console.error('Подробности ошибки:', {
@@ -552,11 +614,23 @@ export const FilesProvider = ({ children }) => {
   const removeFile = async (fileId) => {
     const fileToRemove = uploadedFiles.find(file => file.id === fileId);
     if (fileToRemove) {
-      try {
-        // Удаляем файл из IndexedDB
-        await deleteFileFromIndexedDB(fileId);
-      } catch (error) {
-        console.error('Ошибка при удалении файла из IndexedDB:', error);
+      if (useDatabase) {
+        try {
+          // Удаляем из PostgreSQL
+          await fetch(`http://localhost:3001/api/files/${fileId}`, {
+            method: 'DELETE'
+          });
+          console.log('Файл удален из PostgreSQL');
+        } catch (error) {
+          console.error('Ошибка при удалении файла из PostgreSQL:', error);
+        }
+      } else {
+        try {
+          // Удаляем файл из IndexedDB
+          await deleteFileFromIndexedDB(fileId);
+        } catch (error) {
+          console.error('Ошибка при удалении файла из IndexedDB:', error);
+        }
       }
 
       // Удаляем файл из состояния
@@ -597,16 +671,28 @@ export const FilesProvider = ({ children }) => {
 
   // Очистка всех файлов
   const clearAllFiles = async () => {
-    try {
-      // Удаляем все файлы из IndexedDB
-      for (const file of uploadedFiles) {
-        await deleteFileFromIndexedDB(file.id);
+    if (useDatabase) {
+      try {
+        // Очищаем данные из PostgreSQL
+        await fetch('http://localhost:3001/api/clear-all', {
+          method: 'DELETE'
+        });
+        console.log('Все данные очищены из PostgreSQL');
+      } catch (error) {
+        console.error('Ошибка при очистке PostgreSQL:', error);
       }
+    } else {
+      try {
+        // Удаляем все файлы из IndexedDB
+        for (const file of uploadedFiles) {
+          await deleteFileFromIndexedDB(file.id);
+        }
 
-      // Очищаем данные рейсов из IndexedDB
-      await clearFlightDataFromIndexedDB();
-    } catch (error) {
-      console.error('Ошибка при очистке IndexedDB:', error);
+        // Очищаем данные рейсов из IndexedDB
+        await clearFlightDataFromIndexedDB();
+      } catch (error) {
+        console.error('Ошибка при очистке IndexedDB:', error);
+      }
     }
 
     setUploadedFiles([]);
@@ -681,7 +767,19 @@ export const FilesProvider = ({ children }) => {
   };
 
   // Получение статистики
-  const getFlightStats = () => {
+  const getFlightStats = async () => {
+    if (useDatabase) {
+      try {
+        const response = await fetch('http://localhost:3001/api/stats');
+        if (response.ok) {
+          return await response.json();
+        }
+      } catch (error) {
+        console.error('Ошибка получения статистики из PostgreSQL:', error);
+      }
+    }
+
+    // Fallback к локальным данным
     return {
       totalFlights: flightData.length,
       totalFiles: uploadedFiles.length,

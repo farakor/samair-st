@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,6 +8,40 @@ export default function EmailLogs() {
   const [loading, setLoading] = useState(false);
   const [manualFetchLoading, setManualFetchLoading] = useState(false);
   const { canAccessUpload } = useAuth();
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/email-logs');
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке логов:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/email-status');
+      if (response.ok) {
+        const data = await response.json();
+        setStatus(data);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке статуса:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (canAccessUpload()) {
+      loadLogs();
+      loadStatus();
+    }
+  }, [canAccessUpload, loadLogs, loadStatus]);
 
   // Проверяем права доступа
   if (!canAccessUpload()) {
@@ -27,37 +61,7 @@ export default function EmailLogs() {
     );
   }
 
-  useEffect(() => {
-    loadLogs();
-    loadStatus();
-  }, []);
 
-  const loadLogs = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/email-logs');
-      if (response.ok) {
-        const data = await response.json();
-        setLogs(data);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке логов:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStatus = async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/email-status');
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке статуса:', error);
-    }
-  };
 
   const manualFetch = async () => {
     setManualFetchLoading(true);

@@ -1,6 +1,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const XLSX = require('xlsx');
+const databaseService = require('./databaseService');
 
 class FileProcessor {
   constructor() {
@@ -89,7 +90,7 @@ class FileProcessor {
 
   // Парсинг Excel файла (аналогично FilesContext)
   async parseExcelFile(filePath, originalName) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       console.log(`Начинаем парсинг файла: ${originalName}`);
 
       try {
@@ -159,6 +160,17 @@ class FileProcessor {
 
         console.log(`Извлечено ${flights.length} рейсов из файла ${originalName}`);
         console.log('Примеры извлеченных данных:', flights.slice(0, 3));
+        
+        // Сохраняем данные рейсов в базу данных
+        if (flights.length > 0) {
+          try {
+            await databaseService.saveFlightData(flights);
+            console.log(`Сохранено ${flights.length} рейсов в PostgreSQL`);
+          } catch (dbError) {
+            console.error('Ошибка сохранения в базу данных:', dbError);
+          }
+        }
+        
         resolve(flights);
       } catch (error) {
         console.error('Ошибка при парсинге Excel файла:', error);

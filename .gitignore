@@ -82,4 +82,15 @@ jspm_packages/
 .fusebox/
 
 # DynamoDB Local files
-.dynamodb/ 
+.dynamodb/
+
+# Email uploads and processed files
+server/data/uploads/
+server/data/config/
+
+# Environment files
+server/.env
+
+# Database backups
+*.sql
+*.backup 
