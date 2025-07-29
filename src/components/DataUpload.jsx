@@ -1,14 +1,83 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import { useFiles } from '../context/FilesContext';
 import { useAuth } from '../context/AuthContext';
 
-export default function DataUpload() {
+// Error Boundary для обработки ошибок в компоненте
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Ошибка в компоненте DataUpload:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex">
+          <Sidebar />
+          <div className="flex-1 ml-64 p-8">
+            <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded">
+              <p className="font-medium">Произошла ошибка при загрузке страницы</p>
+              <p className="text-sm mt-1">
+                Попробуйте обновить страницу. Если проблема сохраняется, обратитесь к администратору.
+              </p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-red-600">Показать техническую информацию</summary>
+                <pre className="mt-2 text-xs bg-red-50 p-2 rounded overflow-auto">
+                  {this.state.error?.toString()}
+                </pre>
+              </details>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Обновить страницу
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function DataUploadComponent() {
   const [dragActive, setDragActive] = useState(false);
-  const { uploadedFiles, addFiles, removeFile, filesCount, downloadOriginalFile, loadEmailFiles, getFlightStats } = useFiles();
+  const [stats, setStats] = useState({
+    totalFiles: 0,
+    totalFlights: 0,
+    manualFiles: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+  const { uploadedFiles, addFiles, removeFile, filesCount, downloadOriginalFile, getFlightStats, refreshAllData } = useFiles();
   const { canAccessUpload } = useAuth();
 
-  const stats = getFlightStats();
+  // Загружаем статистику при монтировании компонента и изменении файлов
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setStatsLoading(true);
+        const newStats = await getFlightStats();
+        setStats(newStats);
+      } catch (error) {
+        console.error('Ошибка при загрузке статистики:', error);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    loadStats();
+  }, [uploadedFiles, getFlightStats]);
 
   // Проверяем права доступа
   if (!canAccessUpload()) {
@@ -59,6 +128,14 @@ export default function DataUpload() {
       const newFiles = await addFiles(files);
       console.log("Файлы загружены:", newFiles);
 
+      // Обновляем статистику после загрузки файлов
+      try {
+        const newStats = await getFlightStats();
+        setStats(newStats);
+      } catch (statsError) {
+        console.error('Ошибка при обновлении статистики:', statsError);
+      }
+
       // Проверяем есть ли файлы с ошибками
       const errorFiles = newFiles.filter(file => file.status === 'error');
       if (errorFiles.length > 0) {
@@ -107,7 +184,7 @@ export default function DataUpload() {
         </div>
 
         {/* Статистика */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -117,7 +194,11 @@ export default function DataUpload() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Всего файлов</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.totalFiles}</p>
+                {statsLoading ? (
+                  <div className="h-8 w-12 bg-gray-200 rounded animate-pulse"></div>
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">{stats.totalFiles}</p>
+                )}
               </div>
             </div>
           </div>
@@ -131,21 +212,11 @@ export default function DataUpload() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Ручные загрузки</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.manualFiles}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Из почты</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.emailFiles}</p>
+                {statsLoading ? (
+                  <div className="h-8 w-12 bg-gray-200 rounded animate-pulse"></div>
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">{stats.manualFiles}</p>
+                )}
               </div>
             </div>
           </div>
@@ -159,7 +230,11 @@ export default function DataUpload() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Всего рейсов</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.totalFlights}</p>
+                {statsLoading ? (
+                  <div className="h-8 w-12 bg-gray-200 rounded animate-pulse"></div>
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">{stats.totalFlights}</p>
+                )}
               </div>
             </div>
           </div>
@@ -214,21 +289,26 @@ export default function DataUpload() {
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">Загруженные файлы</h3>
-                <p className="text-sm text-gray-500">Ручные загрузки и файлы из почты</p>
+                <p className="text-sm text-gray-500">Файлы из ручной загрузки и email</p>
               </div>
               <div className="flex items-center space-x-4">
                 <button
                   onClick={async () => {
                     try {
-                      await loadEmailFiles();
-                      console.log('Файлы из почты обновлены');
+                      await refreshAllData();
+                      const newStats = await getFlightStats();
+                      setStats(newStats);
                     } catch (error) {
-                      console.error('Ошибка при обновлении файлов из почты:', error);
+                      console.error('Ошибка обновления:', error);
                     }
                   }}
-                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="text-blue-600 hover:text-blue-900 text-sm font-medium flex items-center"
+                  title="Обновить список файлов"
                 >
-                  Обновить из почты
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Обновить
                 </button>
                 <div className="text-sm text-gray-600">
                   {filesCount} {filesCount === 1 ? 'файл' : filesCount < 5 ? 'файла' : 'файлов'}
@@ -310,25 +390,30 @@ export default function DataUpload() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex items-center">
                           {file.source === 'email' ? (
-                            <svg className="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
+                            <>
+                              <svg className="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              <div className="flex flex-col">
+                                <span>Из почты</span>
+                                <span className="text-xs text-gray-500" title={file.emailSubject}>
+                                  {file.author || 'Email'}
+                                </span>
+                              </div>
+                            </>
                           ) : (
-                            <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
+                            <>
+                              <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <div className="flex flex-col">
+                                <span>Ручная загрузка</span>
+                                <span className="text-xs text-gray-500">
+                                  Текущий пользователь
+                                </span>
+                              </div>
+                            </>
                           )}
-                          <div className="flex flex-col">
-                            <span>{file.source === 'email' ? 'Почта' : 'Ручная загрузка'}</span>
-                            <span className="text-xs text-gray-500">
-                              {file.source === 'email' ? file.author : 'Текущий пользователь'}
-                            </span>
-                            {file.emailSubject && (
-                              <span className="text-xs text-gray-400" title={file.emailSubject}>
-                                Тема: {file.emailSubject.length > 30 ? file.emailSubject.substring(0, 30) + '...' : file.emailSubject}
-                              </span>
-                            )}
-                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -359,6 +444,14 @@ export default function DataUpload() {
                             onClick={async () => {
                               try {
                                 await removeFile(file.id);
+
+                                // Обновляем статистику после удаления файла
+                                try {
+                                  const newStats = await getFlightStats();
+                                  setStats(newStats);
+                                } catch (statsError) {
+                                  console.error('Ошибка при обновлении статистики:', statsError);
+                                }
                               } catch (error) {
                                 console.error('Ошибка при удалении файла:', error);
                                 alert('Произошла ошибка при удалении файла');
@@ -383,4 +476,12 @@ export default function DataUpload() {
       </div>
     </div>
   );
-} 
+}
+
+export default function DataUpload() {
+  return (
+    <ErrorBoundary>
+      <DataUploadComponent />
+    </ErrorBoundary>
+  );
+}

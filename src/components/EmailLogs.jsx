@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
+import { useFiles } from '../context/FilesContext';
 
 export default function EmailLogs() {
   const [logs, setLogs] = useState([]);
   const [status, setStatus] = useState({});
   const [loading, setLoading] = useState(false);
   const [manualFetchLoading, setManualFetchLoading] = useState(false);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const { canAccessUpload } = useAuth();
+  const { refreshFlightData, refreshFilesList } = useFiles();
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -73,16 +76,34 @@ export default function EmailLogs() {
       if (response.ok) {
         const result = await response.json();
 
-        // Показываем результат
-        if (result.totalFiles > 0) {
-          alert(`Успешно получено ${result.totalFiles} файл(ов) из ${result.totalEmails} писем.`);
-        } else {
-          alert(`Обработано ${result.totalEmails} писем, но новых файлов не найдено.`);
-        }
+        // Показываем результат (обрабатываем новую структуру API)
+        if (result.success) {
+          const { totalFiles, totalEmails } = result.data;
 
-        // Обновляем логи
-        await loadLogs();
-        await loadStatus();
+          if (totalFiles > 0) {
+            // Обновляем данные рейсов и файлов после успешной обработки
+            console.log('🔄 Обновляем данные после обработки писем...');
+            try {
+              await Promise.all([
+                refreshFlightData(),
+                refreshFilesList()
+              ]);
+              console.log('✅ Данные успешно обновлены');
+              alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n🔄 Данные рейсов автоматически обновлены.`);
+            } catch (refreshError) {
+              console.error('❌ Ошибка при обновлении данных:', refreshError);
+              alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n⚠️ Данные обновятся при перезагрузке страницы.`);
+            }
+          } else {
+            alert(`📬 Обработано ${totalEmails} писем, но новых файлов не найдено.`);
+          }
+
+          // Обновляем логи и статус
+          await loadLogs();
+          await loadStatus();
+        } else {
+          alert(`❌ Ошибка: ${result.error || 'Неизвестная ошибка'}`);
+        }
       } else {
         const error = await response.json();
         alert(`Ошибка: ${error.error}`);
@@ -91,6 +112,50 @@ export default function EmailLogs() {
       alert(`Ошибка при получении писем: ${error.message}`);
     } finally {
       setManualFetchLoading(false);
+    }
+  };
+
+  const runDiagnostics = async () => {
+    setDiagnosticsLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/database-diagnostics');
+
+      if (response.ok) {
+        const result = await response.json();
+
+        if (result.success) {
+          const { data } = result;
+          const message = `
+📊 Диагностика базы данных:
+
+🔗 Подключение: ${data.database.connected ? '✅ Активно' : '❌ Нет'}
+📋 Таблицы: ${data.database.allTablesExist ? '✅ Созданы' : '❌ Отсутствуют'}
+  - Найденные: ${data.database.tables.join(', ')}
+
+📈 Статистика:
+  - Файлов в базе: ${data.statistics.totalFiles}
+  - Рейсов в базе: ${data.statistics.totalFlights}
+  
+📂 По источникам:
+  - Файлы: ${JSON.stringify(data.statistics.filesBySource)}
+  - Рейсы: ${JSON.stringify(data.statistics.flightsBySource)}
+
+🎯 Последние файлы: ${data.samples.recentFiles.length}
+🛫 Последние рейсы: ${data.samples.recentFlights.length}
+          `;
+
+          alert(message);
+        } else {
+          alert(`Ошибка диагностики: ${result.error}`);
+        }
+      } else {
+        const error = await response.json();
+        alert(`Ошибка API: ${error.error}`);
+      }
+    } catch (error) {
+      alert(`Ошибка запроса диагностики: ${error.message}`);
+    } finally {
+      setDiagnosticsLoading(false);
     }
   };
 
@@ -173,28 +238,53 @@ export default function EmailLogs() {
               )}
             </div>
 
-            <button
-              onClick={manualFetch}
-              disabled={manualFetchLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            >
-              {manualFetchLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Получаем...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Запустить вручную
-                </>
-              )}
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={manualFetch}
+                disabled={manualFetchLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {manualFetchLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Получаем...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Запустить вручную
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={runDiagnostics}
+                disabled={diagnosticsLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {diagnosticsLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Проверяем...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Диагностика БД
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

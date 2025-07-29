@@ -91,15 +91,16 @@ class FileProcessor {
   // Парсинг Excel файла (аналогично FilesContext)
   async parseExcelFile(filePath, originalName) {
     return new Promise(async (resolve, reject) => {
-      console.log(`Начинаем парсинг файла: ${originalName}`);
+      console.log(`Парсинг файла: ${originalName}`);
 
       try {
-        const data = fs.readFileSync(filePath);
-        console.log(`Файл прочитан: ${originalName}, размер: ${data.length} байт`);
-
-        const workbook = XLSX.read(data, { type: 'buffer', cellDates: false });
-        console.log(`XLSX.read успешно выполнен для файла ${originalName}`);
-        console.log(`Найдены листы:`, workbook.SheetNames);
+        // Проверяем существование файла
+        if (!require('fs').existsSync(filePath)) {
+          throw new Error(`Файл не найден: ${filePath}`);
+        }
+        
+        const data = require('fs-extra').readFileSync(filePath);
+        const workbook = require('xlsx').read(data, { type: 'buffer', cellDates: false });
 
         if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
           throw new Error('Файл не содержит листов Excel');
@@ -108,33 +109,28 @@ class FileProcessor {
         // Берем первый лист
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        console.log(`Обрабатываем лист: ${firstSheetName}`);
 
         if (!worksheet) {
           throw new Error(`Лист "${firstSheetName}" не найден или поврежден`);
         }
 
         // Конвертируем в JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        console.log('Общее количество строк в файле:', jsonData.length);
-        console.log('Первые 5 строк:', jsonData.slice(0, 5));
+        const jsonData = require('xlsx').utils.sheet_to_json(worksheet, { header: 1 });
 
         if (jsonData.length < 4) {
           console.log(`Файл ${originalName} содержит менее 4 строк, возвращаем пустой массив`);
-          resolve([]); // Файл содержит менее 4 строк (недостаточно данных)
+          resolve([]);
           return;
         }
 
         // Начинаем с 3-й строки (индекс 2) - это заголовки столбцов
         // Данные начинаются с 4-й строки (индекс 3)
-        const headerRow = jsonData[2]; // 3-я строка с заголовками
-        console.log('Заголовки столбцов:', headerRow);
-
         const flights = jsonData.slice(3).map((row, index) => {
-          if (!row || row.length === 0 || !row[2]) return null; // Пропускаем пустые строки или строки без даты (теперь в колонке C)
+          if (!row || row.length === 0 || !row[2]) {
+            return null; // Пропускаем пустые строки или строки без даты
+          }
 
-          // Конвертируем дату из Excel серийного номера (теперь в колонке C - индекс 2)
+          // Конвертируем дату из Excel серийного номера (колонка C - индекс 2)
           const convertedDate = this.excelSerialDateToJSDate(row[2]);
 
           return {
@@ -156,24 +152,25 @@ class FileProcessor {
             uploadedAt: Date.now(),
             source: 'email' // Указываем источник
           };
-        }).filter(flight => flight !== null && flight.date && flight.date !== 'Invalid Date'); // Убираем пустые строки и некорректные даты
+        }).filter(flight => flight !== null && flight.date && flight.date !== 'Invalid Date');
 
         console.log(`Извлечено ${flights.length} рейсов из файла ${originalName}`);
-        console.log('Примеры извлеченных данных:', flights.slice(0, 3));
         
         // Сохраняем данные рейсов в базу данных
         if (flights.length > 0) {
           try {
+            const databaseService = require('./databaseService');
             await databaseService.saveFlightData(flights);
             console.log(`Сохранено ${flights.length} рейсов в PostgreSQL`);
           } catch (dbError) {
-            console.error('Ошибка сохранения в базу данных:', dbError);
+            console.error(`Ошибка сохранения в базу данных:`, dbError.message);
+            // Не прерываем выполнение, просто логируем ошибку
           }
         }
         
         resolve(flights);
       } catch (error) {
-        console.error('Ошибка при парсинге Excel файла:', error);
+        console.error(`Ошибка при парсинге Excel файла ${originalName}:`, error.message);
         reject(error);
       }
     });
@@ -182,10 +179,11 @@ class FileProcessor {
   // Обработка файла из почты
   async processEmailFile(metadata) {
     try {
-      console.log(`Обрабатываем файл из почты: ${metadata.originalName}`);
+      console.log(`🔄 Обрабатываем файл из почты: ${metadata.originalName}`);
       
       // Парсим Excel файл
       const flights = await this.parseExcelFile(metadata.filepath, metadata.originalName);
+      console.log(`📊 Извлечено ${flights.length} рейсов из файла ${metadata.originalName}`);
       
       // Создаем объект файла в формате FilesContext
       const fileInfo = {
@@ -193,7 +191,7 @@ class FileProcessor {
         date: new Date().toLocaleDateString('ru-RU'),
         fileName: metadata.originalName,
         size: this.formatFileSize(metadata.size),
-        author: `Почта: ${metadata.emailFrom}`,
+        author: `📧 ${metadata.emailFrom}`,
         uploadedAt: Date.now(),
         status: 'completed',
         flightsCount: flights.length,
@@ -201,6 +199,60 @@ class FileProcessor {
         emailSubject: metadata.emailSubject,
         emailDate: metadata.emailDate
       };
+
+      // Сохраняем информацию о файле в PostgreSQL
+      try {
+        const databaseService = require('./databaseService');
+        await databaseService.saveFileInfo(fileInfo);
+        console.log(`✅ Информация о файле ${metadata.originalName} сохранена в PostgreSQL`);
+        
+        // Сохраняем данные рейсов в базу данных
+        if (flights.length > 0) {
+          console.log(`💾 Начинаем сохранение ${flights.length} рейсов в PostgreSQL...`);
+          
+          // Логируем несколько примеров рейсов для проверки
+          console.log(`📝 Пример первого рейса:`, {
+            id: flights[0].id,
+            number: flights[0].number,
+            date: flights[0].date,
+            departure: flights[0].departure,
+            arrival: flights[0].arrival,
+            sourceFile: flights[0].sourceFile
+          });
+          
+          if (flights.length > 1) {
+            console.log(`📝 Пример последнего рейса:`, {
+              id: flights[flights.length - 1].id,
+              number: flights[flights.length - 1].number,
+              date: flights[flights.length - 1].date,
+              sourceFile: flights[flights.length - 1].sourceFile
+            });
+          }
+          
+          // Сохраняем рейсы в базу данных
+          await databaseService.saveFlightData(flights);
+          console.log(`✅ Обработано ${flights.length} рейсов из файла ${metadata.originalName}`);
+        } else {
+          console.log(`⚠️ Файл ${metadata.originalName} не содержит рейсов для сохранения`);
+        }
+      } catch (dbError) {
+        console.error('❌ Ошибка сохранения данных в PostgreSQL:', dbError);
+        console.error('❌ Детали ошибки:', dbError.message);
+        console.error('❌ Стек ошибки:', dbError.stack);
+        
+        // Обновляем статус файла на ошибку
+        fileInfo.status = 'error';
+        fileInfo.error = dbError.message;
+        
+        // Пытаемся сохранить информацию об ошибке
+        try {
+          await databaseService.saveFileInfo(fileInfo);
+        } catch (secondaryError) {
+          console.error('❌ Не удалось сохранить информацию об ошибке:', secondaryError);
+        }
+        
+        throw dbError; // Пробрасываем ошибку дальше
+      }
 
       // Возвращаем обработанные данные
       return {
@@ -210,22 +262,34 @@ class FileProcessor {
       };
 
     } catch (error) {
-      console.error(`Ошибка при обработке файла ${metadata.originalName}:`, error);
+      console.error(`❌ Ошибка при обработке файла ${metadata.originalName}:`, error);
+      console.error(`❌ Стек ошибки:`, error.stack);
+      
+      const fileInfo = {
+        id: Date.now() + Math.random(),
+        date: new Date().toLocaleDateString('ru-RU'),
+        fileName: metadata.originalName,
+        size: this.formatFileSize(metadata.size),
+        author: `📧 ${metadata.emailFrom}`,
+        uploadedAt: Date.now(),
+        status: 'error',
+        error: error.message,
+        source: 'email',
+        emailSubject: metadata.emailSubject,
+        emailDate: metadata.emailDate
+      };
+
+      // Сохраняем информацию об ошибке в PostgreSQL
+      try {
+        const databaseService = require('./databaseService');
+        await databaseService.saveFileInfo(fileInfo);
+        console.log(`⚠️ Информация об ошибке файла ${metadata.originalName} сохранена в PostgreSQL`);
+      } catch (dbError) {
+        console.error('❌ Ошибка сохранения информации об ошибке в PostgreSQL:', dbError);
+      }
       
       return {
-        fileInfo: {
-          id: Date.now() + Math.random(),
-          date: new Date().toLocaleDateString('ru-RU'),
-          fileName: metadata.originalName,
-          size: this.formatFileSize(metadata.size),
-          author: `Почта: ${metadata.emailFrom}`,
-          uploadedAt: Date.now(),
-          status: 'error',
-          error: error.message,
-          source: 'email',
-          emailSubject: metadata.emailSubject,
-          emailDate: metadata.emailDate
-        },
+        fileInfo,
         flights: [],
         success: false,
         error: error.message
@@ -242,22 +306,38 @@ class FileProcessor {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  // Получение всех обработанных файлов из почты
+  // Получение всех обработанных файлов из почты (только метаданные)
   async getProcessedEmailFiles() {
     try {
       const emailService = require('./emailService');
       const emailFiles = await emailService.getEmailFiles();
       
-      const processedFiles = [];
+      const fileInfos = [];
       
       for (const metadata of emailFiles) {
-        const result = await this.processEmailFile(metadata);
-        processedFiles.push(result);
+        // Создаем только информацию о файле без обработки содержимого
+        const fileInfo = {
+          id: `email_${metadata.processedAt}`,
+          originalName: metadata.originalName,
+          size: this.formatFileSize(metadata.size),
+          emailFrom: metadata.emailFrom,
+          emailSubject: metadata.emailSubject,
+          emailDate: metadata.emailDate,
+          processedAt: metadata.processedAt,
+          status: metadata.status || 'completed',
+          flightsCount: metadata.flightsCount || 0,
+          error: metadata.error
+        };
+        
+        fileInfos.push(fileInfo);
       }
       
-      return processedFiles;
+      // Сортируем по дате обработки (новые сначала)
+      fileInfos.sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt));
+      
+      return fileInfos;
     } catch (error) {
-      console.error('Ошибка при получении обработанных файлов из почты:', error);
+      console.error('Ошибка при получении информации о файлах из почты:', error);
       return [];
     }
   }

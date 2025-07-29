@@ -37,8 +37,14 @@ const query = async (text, params) => {
 // Функция для инициализации базы данных
 const initDatabase = async () => {
   try {
-    console.log('Инициализация базы данных...');
+    console.log('🚀 Инициализация базы данных...');
     
+    // Проверяем подключение
+    console.log('🔍 Проверяем подключение к PostgreSQL...');
+    const connectionTest = await query('SELECT NOW()');
+    console.log('✅ Подключение к PostgreSQL успешно:', connectionTest.rows[0]);
+    
+    console.log('📋 Создание таблицы uploaded_files...');
     // Создаем таблицу для файлов
     await query(`
       CREATE TABLE IF NOT EXISTS uploaded_files (
@@ -54,10 +60,23 @@ const initDatabase = async () => {
         error_message TEXT,
         source VARCHAR(50) DEFAULT 'manual',
         file_info JSONB,
+        email_subject TEXT,
+        email_date VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Таблица uploaded_files создана/проверена');
 
+    console.log('🔧 Добавление новых колонок в uploaded_files...');
+    // Добавляем новые колонки если они не существуют (миграция)
+    await query(`
+      ALTER TABLE uploaded_files 
+      ADD COLUMN IF NOT EXISTS email_subject TEXT,
+      ADD COLUMN IF NOT EXISTS email_date VARCHAR(50)
+    `);
+    console.log('✅ Колонки email_subject и email_date добавлены/проверены');
+
+    console.log('📋 Создание таблицы flight_data...');
     // Создаем таблицу для данных рейсов
     await query(`
       CREATE TABLE IF NOT EXISTS flight_data (
@@ -71,18 +90,31 @@ const initDatabase = async () => {
         departure_time VARCHAR(50),
         arrival_time VARCHAR(50),
         flight_time VARCHAR(50),
-        configuration VARCHAR(100),
-        passengers VARCHAR(50),
+        configuration VARCHAR(200),
+        passengers VARCHAR(100),
         pax_percentage VARCHAR(50),
-        baggage VARCHAR(50),
-        crew VARCHAR(50),
+        baggage VARCHAR(100),
+        crew TEXT,
         source_file VARCHAR(255),
         uploaded_at BIGINT,
         source VARCHAR(50) DEFAULT 'manual',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Таблица flight_data создана/проверена');
 
+    console.log('🔧 Обновление колонок в flight_data...');
+    // Обновляем существующие колонки если они слишком маленькие (миграция)
+    await query(`
+      ALTER TABLE flight_data 
+      ALTER COLUMN configuration TYPE VARCHAR(200),
+      ALTER COLUMN passengers TYPE VARCHAR(100),
+      ALTER COLUMN baggage TYPE VARCHAR(100),
+      ALTER COLUMN crew TYPE TEXT
+    `);
+    console.log('✅ Колонки в flight_data обновлены');
+
+    console.log('📂 Создание индексов...');
     // Создаем индексы для оптимизации запросов
     await query(`
       CREATE INDEX IF NOT EXISTS idx_flight_data_date ON flight_data(date);
@@ -92,10 +124,37 @@ const initDatabase = async () => {
       CREATE INDEX IF NOT EXISTS idx_flight_data_source_file ON flight_data(source_file);
       CREATE INDEX IF NOT EXISTS idx_uploaded_files_file_id ON uploaded_files(file_id);
     `);
+    console.log('✅ Индексы созданы/проверены');
 
-    console.log('База данных инициализирована успешно');
+    // Проверяем, что таблицы действительно существуют
+    console.log('🔍 Проверяем существование таблиц...');
+    const tablesResult = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name IN ('uploaded_files', 'flight_data')
+    `);
+    
+    const existingTables = tablesResult.rows.map(row => row.table_name);
+    console.log('📋 Существующие таблицы:', existingTables);
+    
+    if (existingTables.includes('uploaded_files') && existingTables.includes('flight_data')) {
+      console.log('✅ Все необходимые таблицы присутствуют');
+    } else {
+      console.error('❌ Некоторые таблицы отсутствуют!');
+    }
+
+    // Проверяем количество записей в таблицах
+    const filesCount = await query('SELECT COUNT(*) as count FROM uploaded_files');
+    const flightsCount = await query('SELECT COUNT(*) as count FROM flight_data');
+    
+    console.log(`📊 Статистика базы данных:`);
+    console.log(`   - Файлов в базе: ${filesCount.rows[0].count}`);
+    console.log(`   - Рейсов в базе: ${flightsCount.rows[0].count}`);
+
+    console.log('🎉 База данных инициализирована успешно');
   } catch (error) {
-    console.error('Ошибка инициализации базы данных:', error);
+    console.error('❌ Ошибка инициализации базы данных:', error);
+    console.error('❌ Стек ошибки:', error.stack);
     throw error;
   }
 };

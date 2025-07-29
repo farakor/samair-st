@@ -220,95 +220,93 @@ export const FilesProvider = ({ children }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [useDatabase, setUseDatabase] = useState(true); // Флаг использования PostgreSQL
 
-  // Загружаем файлы и данные рейсов при инициализации
+  // Функция для загрузки файлов из localStorage
+  const loadFilesFromStorage = () => {
+    try {
+      const savedFiles = localStorage.getItem('uploadedFiles');
+      if (savedFiles) {
+        return JSON.parse(savedFiles);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке файлов из localStorage:', error);
+    }
+    return [];
+  };
+
+  // Загрузка файлов при инициализации
   useEffect(() => {
     const loadData = async () => {
+      // Загружаем файлы из PostgreSQL при инициализации
       if (useDatabase) {
-        // Загружаем данные из PostgreSQL
         try {
-          console.log('Загружаем данные из PostgreSQL...');
+          console.log('📁 Загружаем файлы из PostgreSQL...');
+          const filesFromDB = await refreshFilesList();
+          console.log('✅ Файлы загружены из PostgreSQL:', filesFromDB.length);
 
-          // Загружаем файлы
-          const filesResponse = await fetch('http://localhost:3001/api/files');
-          if (filesResponse.ok) {
-            const files = await filesResponse.json();
-            setUploadedFiles(files);
-            console.log('Файлы загружены из PostgreSQL:', files.length);
-          }
-
-          // Загружаем данные рейсов
-          const flightsResponse = await fetch('http://localhost:3001/api/flight-data');
-          if (flightsResponse.ok) {
-            const flights = await flightsResponse.json();
-            setFlightData(flights);
-            console.log('Данные рейсов загружены из PostgreSQL:', flights.length);
+          // Если файлов из базы нет, загружаем из localStorage как fallback
+          if (filesFromDB.length === 0) {
+            const savedFiles = loadFilesFromStorage();
+            if (savedFiles.length > 0) {
+              console.log('📁 Загружены файлы из localStorage как fallback:', savedFiles.length);
+              setUploadedFiles(savedFiles);
+            }
           }
         } catch (error) {
-          console.error('Ошибка загрузки из PostgreSQL, переходим на локальное хранение:', error);
-          setUseDatabase(false);
-          // Fallback к старой логике
-          await loadFromLocalStorage();
+          console.error('❌ Ошибка загрузки файлов из PostgreSQL:', error);
+          // Используем localStorage как fallback
+          const savedFiles = loadFilesFromStorage();
+          if (savedFiles.length > 0) {
+            console.log('📁 Загружены файлы из localStorage после ошибки:', savedFiles.length);
+            setUploadedFiles(savedFiles);
+          }
         }
       } else {
-        await loadFromLocalStorage();
+        // Если PostgreSQL отключен, используем localStorage
+        const savedFiles = loadFilesFromStorage();
+        if (savedFiles.length > 0) {
+          console.log('📁 Загружены файлы из localStorage:', savedFiles.length);
+          setUploadedFiles(savedFiles);
+        }
+      }
+
+      // Инициализируем данные рейсов
+      if (useDatabase) {
+        try {
+          const response = await fetch('http://localhost:3001/api/flight-data');
+          if (response.ok) {
+            const flights = await response.json();
+            setFlightData(flights);
+            console.log('✅ Данные рейсов загружены из PostgreSQL:', flights.length);
+          }
+        } catch (error) {
+          console.error('Ошибка при загрузке данных рейсов из PostgreSQL:', error);
+          // Данные рейсов загрузятся позже из базы или будут пустыми
+          console.log('⚠️ Используем пустые данные рейсов как fallback');
+        }
       }
 
       setIsLoaded(true);
     };
 
-    const loadFromLocalStorage = async () => {
-      // Загружаем метаинформацию о файлах из localStorage
-      const savedFiles = localStorage.getItem('uploadedFiles');
-      if (savedFiles) {
-        try {
-          const parsedFiles = JSON.parse(savedFiles);
-          setUploadedFiles(parsedFiles);
-          console.log('Файлы загружены из localStorage:', parsedFiles);
-        } catch (error) {
-          console.error('Ошибка при загрузке файлов из localStorage:', error);
-        }
-      }
-
-      // Миграция данных рейсов из localStorage в IndexedDB
-      try {
-        const oldFlightData = localStorage.getItem('flightData');
-        if (oldFlightData) {
-          console.log('Найдены старые данные рейсов в localStorage, переносим в IndexedDB...');
-          try {
-            const parsedOldData = JSON.parse(oldFlightData);
-            if (parsedOldData && parsedOldData.length > 0) {
-              await saveFlightDataToIndexedDB(parsedOldData);
-              setFlightData(parsedOldData);
-              console.log('Данные рейсов перенесены из localStorage в IndexedDB:', parsedOldData.length);
-            }
-          } catch (parseError) {
-            console.error('Ошибка парсинга старых данных рейсов:', parseError);
-          }
-          // Удаляем старые данные из localStorage
-          localStorage.removeItem('flightData');
-          console.log('Старые данные рейсов удалены из localStorage');
-        } else {
-          // Загружаем данные рейсов из IndexedDB
-          const flightDataFromDB = await getFlightDataFromIndexedDB();
-          if (flightDataFromDB && flightDataFromDB.length > 0) {
-            setFlightData(flightDataFromDB);
-            console.log('Данные рейсов загружены из IndexedDB:', flightDataFromDB.length);
-          }
-        }
-      } catch (error) {
-        console.error('Ошибка при миграции/загрузке данных рейсов:', error);
-      }
-
-      // Загружаем файлы из почты
-      try {
-        await loadEmailFiles();
-      } catch (error) {
-        console.error('Ошибка при загрузке файлов из почты:', error);
-      }
-    };
-
     loadData();
   }, [useDatabase]);
+
+  // Автоматическое обновление списка файлов каждые 30 секунд
+  useEffect(() => {
+    if (!isLoaded || !useDatabase) return;
+
+    const interval = setInterval(async () => {
+      try {
+        console.log('🔄 Автоматическое обновление списка файлов...');
+        await refreshFilesList();
+        await refreshFlightData();
+      } catch (error) {
+        console.error('❌ Ошибка автоматического обновления:', error);
+      }
+    }, 30000); // 30 секунд
+
+    return () => clearInterval(interval);
+  }, [isLoaded, useDatabase]);
 
   // Сохраняем файлы в localStorage при изменении (только после загрузки)
   useEffect(() => {
@@ -729,43 +727,6 @@ export const FilesProvider = ({ children }) => {
     return filteredData;
   };
 
-  // Загрузка файлов из почты
-  const loadEmailFiles = async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/email-files');
-      if (response.ok) {
-        const emailFiles = await response.json();
-
-        // Добавляем файлы из почты к существующим файлам
-        if (emailFiles.length > 0) {
-          const newEmailFiles = [];
-          const newEmailFlightData = [];
-
-          for (const emailFile of emailFiles) {
-            // Проверяем, нет ли уже такого файла
-            const existingFile = uploadedFiles.find(file =>
-              file.fileName === emailFile.fileInfo.fileName &&
-              file.source === 'email'
-            );
-
-            if (!existingFile) {
-              newEmailFiles.push(emailFile.fileInfo);
-              newEmailFlightData.push(...emailFile.flights);
-            }
-          }
-
-          if (newEmailFiles.length > 0) {
-            setUploadedFiles(prev => [...prev, ...newEmailFiles]);
-            setFlightData(prev => [...prev, ...newEmailFlightData]);
-            console.log(`Добавлено ${newEmailFiles.length} файлов из почты`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке файлов из почты:', error);
-    }
-  };
-
   // Получение статистики
   const getFlightStats = async () => {
     if (useDatabase) {
@@ -785,9 +746,85 @@ export const FilesProvider = ({ children }) => {
       totalFiles: uploadedFiles.length,
       completedFiles: uploadedFiles.filter(file => file.status === 'completed').length,
       errorFiles: uploadedFiles.filter(file => file.status === 'error').length,
-      emailFiles: uploadedFiles.filter(file => file.source === 'email').length,
-      manualFiles: uploadedFiles.filter(file => file.source !== 'email').length
+      manualFiles: uploadedFiles.length
     };
+  };
+
+  // Функция для обновления данных рейсов из базы данных
+  const refreshFlightData = async () => {
+    if (useDatabase) {
+      try {
+        console.log('🔄 Обновляем данные рейсов из PostgreSQL...');
+        const response = await fetch('http://localhost:3001/api/flight-data');
+        if (response.ok) {
+          const flights = await response.json();
+          console.log('✅ Данные рейсов обновлены из PostgreSQL:', flights.length);
+          setFlightData(flights);
+          return flights;
+        } else {
+          console.error('❌ Ошибка при обновлении данных рейсов:', response.statusText);
+        }
+      } catch (error) {
+        console.error('❌ Ошибка при обновлении данных рейсов из PostgreSQL:', error);
+      }
+    }
+    return flightData;
+  };
+
+  // Функция для обновления списка файлов из базы данных
+  const refreshFilesList = async () => {
+    if (useDatabase) {
+      try {
+        console.log('🔄 Обновляем список файлов из PostgreSQL...');
+        const response = await fetch('http://localhost:3001/api/files');
+        if (response.ok) {
+          const files = await response.json();
+          console.log('✅ Список файлов обновлен из PostgreSQL:', files.length);
+
+          // Преобразуем формат данных из базы в локальный формат
+          const formattedFiles = files.map(file => ({
+            id: file.id,
+            date: file.date,
+            fileName: file.fileName,
+            size: file.size,
+            author: file.author,
+            uploadedAt: file.uploadedAt,
+            status: file.status,
+            flightsCount: file.flightsCount,
+            error: file.error,
+            source: file.source,
+            emailSubject: file.emailSubject,
+            emailDate: file.emailDate
+          }));
+
+          setUploadedFiles(formattedFiles);
+          return formattedFiles;
+        } else {
+          console.error('❌ Ошибка при обновлении списка файлов:', response.statusText);
+        }
+      } catch (error) {
+        console.error('❌ Ошибка при обновлении списка файлов из PostgreSQL:', error);
+      }
+    }
+    return uploadedFiles;
+  };
+
+  // Функция для ручного обновления всех данных
+  const refreshAllData = async () => {
+    if (useDatabase) {
+      try {
+        console.log('🔄 Ручное обновление всех данных...');
+        const [files, flights] = await Promise.all([
+          refreshFilesList(),
+          refreshFlightData()
+        ]);
+        console.log('✅ Обновлено файлов:', files.length, 'рейсов:', flights.length);
+        return { files, flights };
+      } catch (error) {
+        console.error('❌ Ошибка ручного обновления:', error);
+        throw error;
+      }
+    }
   };
 
   const value = {
@@ -800,7 +837,9 @@ export const FilesProvider = ({ children }) => {
     getFlightData,
     getFlightStats,
     downloadOriginalFile,
-    loadEmailFiles,
+    refreshFlightData,
+    refreshFilesList,
+    refreshAllData,
     filesCount: uploadedFiles.length,
     flightsCount: flightData.length
   };

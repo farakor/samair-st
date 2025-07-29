@@ -46,19 +46,34 @@ class EmailService {
   // Тестирование подключения к почте
   async testConnection(config) {
     return new Promise((resolve, reject) => {
-      const imap = new Imap({
+      const imapConfig = {
         user: config.user,
         password: config.password,
         host: config.host,
         port: config.port || 993,
         tls: config.tls !== false,
-        tlsOptions: { rejectUnauthorized: false }
+        tlsOptions: { rejectUnauthorized: false },
+        // Добавляем дополнительные опции для лучшей совместимости
+        connTimeout: 10000, // 10 секунд timeout
+        authTimeout: 5000,  // 5 секунд timeout для аутентификации
+        keepalive: false
+      };
+
+      console.log('Попытка подключения с настройками:', {
+        host: imapConfig.host,
+        port: imapConfig.port,
+        user: imapConfig.user,
+        tls: imapConfig.tls
       });
 
+      const imap = new Imap(imapConfig);
+
       let connected = false;
+      let authFailed = false;
 
       imap.once('ready', () => {
         connected = true;
+        console.log('IMAP подключение успешно');
         imap.end();
         resolve({ 
           success: true, 
@@ -67,13 +82,24 @@ class EmailService {
       });
 
       imap.once('error', (err) => {
+        console.error('IMAP ошибка:', err);
         if (!connected) {
-          reject(new Error(`Ошибка подключения к почте: ${err.message}`));
+          if (err.message.includes('Authentication failed') || err.message.includes('Invalid credentials')) {
+            authFailed = true;
+            reject(new Error(`Ошибка аутентификации: Неверный логин или пароль. Проверьте учетные данные.`));
+          } else if (err.message.includes('ENOTFOUND') || err.message.includes('ECONNREFUSED')) {
+            reject(new Error(`Ошибка подключения: Не удается подключиться к серверу ${config.host}:${config.port}. Проверьте настройки сервера.`));
+          } else if (err.message.includes('timeout')) {
+            reject(new Error(`Ошибка подключения: Превышено время ожидания. Проверьте настройки сервера и интернет-соединение.`));
+          } else {
+            reject(new Error(`Ошибка подключения к почте: ${err.message}`));
+          }
         }
       });
 
       imap.once('end', () => {
-        if (!connected) {
+        console.log('IMAP соединение закрыто');
+        if (!connected && !authFailed) {
           reject(new Error('Подключение к почте было закрыто неожиданно'));
         }
       });
@@ -81,8 +107,17 @@ class EmailService {
       try {
         imap.connect();
       } catch (error) {
+        console.error('Ошибка при инициализации подключения:', error);
         reject(new Error(`Ошибка при подключении: ${error.message}`));
       }
+
+      // Добавляем общий timeout
+      setTimeout(() => {
+        if (!connected && !authFailed) {
+          imap.destroy();
+          reject(new Error('Превышено время ожидания подключения (10 секунд)'));
+        }
+      }, 10000);
     });
   }
 
@@ -91,6 +126,8 @@ class EmailService {
     const config = this.loadEmailConfig();
     
     return new Promise((resolve, reject) => {
+      console.log('📧 Создание Promise для получения писем...');
+      
       const imap = new Imap({
         user: config.user,
         password: config.password,
@@ -108,8 +145,10 @@ class EmailService {
       };
 
       imap.once('ready', () => {
+        console.log('📧 IMAP готов, открываем почтовый ящик...');
         imap.openBox('INBOX', false, (err, box) => {
           if (err) {
+            console.error('❌ Ошибка при открытии почтового ящика:', err);
             this.saveLog({
               type: 'error',
               message: 'Ошибка при открытии почтового ящика',
@@ -118,16 +157,22 @@ class EmailService {
             return reject(err);
           }
 
-          // Ищем письма за последние 7 дней с вложениями
+          console.log('📧 Почтовый ящик открыт, начинаем поиск...');
+          
+          // Ищем письма за последние 30 дней с вложениями
           const date = new Date();
-          date.setDate(date.getDate() - 7);
+          date.setDate(date.getDate() - 30);
+          
+          console.log(`📧 Поиск писем с ${date.toISOString()} с вложениями...`);
+          
           const searchCriteria = [
             ['SINCE', date],
             ['HEADER', 'Content-Type', 'multipart']
           ];
 
-          imap.search(searchCriteria, (err, results) => {
+          imap.search(searchCriteria, (err, searchResults) => {
             if (err) {
+              console.error('❌ Ошибка при поиске писем:', err);
               this.saveLog({
                 type: 'error',
                 message: 'Ошибка при поиске писем',
@@ -136,7 +181,10 @@ class EmailService {
               return reject(err);
             }
 
-            if (results.length === 0) {
+            console.log(`📧 Найдено ${searchResults.length} писем с вложениями`);
+
+            if (searchResults.length === 0) {
+              console.log('📧 Писем не найдено, завершаем с пустым результатом');
               this.saveLog({
                 type: 'info',
                 message: 'Новые письма с вложениями не найдены'
@@ -150,12 +198,14 @@ class EmailService {
               });
             }
 
-            this.processEmails(imap, results, resolve, reject);
+            console.log('📧 Запускаем обработку найденных писем...');
+            this.processEmails(imap, searchResults, resolve, reject);
           });
         });
       });
 
       imap.once('error', (err) => {
+        console.error('❌ IMAP ошибка:', err);
         this.saveLog({
           type: 'error',
           message: 'Ошибка IMAP подключения',
@@ -165,16 +215,18 @@ class EmailService {
       });
 
       imap.once('end', () => {
-        console.log('IMAP соединение закрыто');
+        console.log('📧 IMAP соединение закрыто');
       });
 
+      console.log('📧 Подключаемся к IMAP серверу...');
       imap.connect();
     });
   }
 
   // Обработка найденных писем
   async processEmails(imap, messageIds, resolve, reject) {
-    let processedCount = 0;
+    console.log(`🔄 Начинаем обработку ${messageIds.length} писем...`);
+    
     let results = {
       totalEmails: messageIds.length,
       totalFiles: 0,
@@ -183,8 +235,13 @@ class EmailService {
     };
 
     const fetch = imap.fetch(messageIds, { bodies: '' });
+    let processedCount = 0;
+
+    console.log('🔄 Создаем fetch для получения содержимого писем...');
 
     fetch.on('message', (msg, seqno) => {
+      console.log(`📨 Получаем письмо #${seqno}...`);
+      
       msg.on('body', (stream, info) => {
         let buffer = '';
         
@@ -193,61 +250,118 @@ class EmailService {
         });
 
         stream.once('end', async () => {
+          console.log(`📨 Обработка содержимого письма #${seqno}...`);
+          
           try {
             const parsed = await simpleParser(buffer);
             
+            console.log(`Обрабатываем письмо от: ${parsed.from?.text}, тема: ${parsed.subject}`);
+            console.log(`Вложений найдено: ${parsed.attachments?.length || 0}`);
+            
             if (parsed.attachments && parsed.attachments.length > 0) {
               for (const attachment of parsed.attachments) {
+                console.log(`Проверяем вложение: ${attachment.filename}, размер: ${attachment.size}`);
+                
                 if (this.isExcelFile(attachment.filename)) {
+                  console.log(`Файл ${attachment.filename} является Excel файлом, обрабатываем...`);
+                  
                   try {
-                    await this.saveAttachment(attachment, parsed);
-                    results.totalFiles++;
-                    results.processedFiles.push({
-                      filename: attachment.filename,
-                      size: attachment.size,
-                      from: parsed.from?.text || 'Неизвестно',
-                      subject: parsed.subject || 'Без темы',
-                      date: parsed.date || new Date()
-                    });
+                    const savedFile = await this.saveAttachment(attachment, parsed);
+                    
+                    // Считаем файл обработанным только если он был реально сохранен (новый)
+                    if (savedFile) {
+                      results.totalFiles++;
+                      results.processedFiles.push({
+                        filename: attachment.filename,
+                        size: attachment.size,
+                        from: parsed.from?.text || 'Неизвестно',
+                        subject: parsed.subject || 'Без темы',
+                        date: parsed.date || new Date(),
+                        isNew: true
+                      });
+                      console.log(`✅ Новый файл сохранен: ${attachment.filename}`);
+                    } else {
+                      // Файл уже существовал
+                      results.processedFiles.push({
+                        filename: attachment.filename,
+                        size: attachment.size,
+                        from: parsed.from?.text || 'Неизвестно',
+                        subject: parsed.subject || 'Без темы',
+                        date: parsed.date || new Date(),
+                        isNew: false
+                      });
+                      console.log(`⏭️ Файл уже существует: ${attachment.filename}`);
+                    }
                   } catch (error) {
+                    console.error('Ошибка при сохранении файла:', error);
                     results.errors.push({
                       filename: attachment.filename,
                       error: error.message
                     });
                   }
+                } else {
+                  console.log(`Файл ${attachment.filename} не является Excel файлом, пропускаем`);
                 }
               }
             }
+
+            // Увеличиваем счетчик обработанных писем
+            processedCount++;
+            console.log(`✅ Письмо #${seqno} обработано. Обработано ${processedCount}/${messageIds.length}`);
+
+            // Если все письма обработаны, завершаем Promise
+            if (processedCount === messageIds.length) {
+              console.log(`🎉 Все письма обработаны! Закрываем соединение...`);
+              
+              imap.end();
+              
+              // Сохраняем лог
+              this.saveLog({
+                type: 'success',
+                message: `Обработано писем: ${results.totalEmails}, новых файлов: ${results.totalFiles}`,
+                timestamp: new Date().toISOString(),
+                details: results
+              });
+
+              console.log(`🎉 Завершаем Promise с результатами:`, results);
+              resolve(results);
+            }
+
           } catch (error) {
+            console.error('Ошибка при обработке письма:', error);
             results.errors.push({
-              message: `Ошибка обработки письма ${seqno}`,
+              seqno: seqno,
               error: error.message
             });
+
+            // Увеличиваем счетчик даже при ошибке
+            processedCount++;
+            
+            // Если все письма обработаны (включая ошибки), завершаем
+            if (processedCount === messageIds.length) {
+              console.log(`⚠️ Все письма обработаны с ошибками. Закрываем соединение...`);
+              imap.end();
+              resolve(results);
+            }
           }
         });
       });
     });
 
     fetch.once('error', (err) => {
-      this.saveLog({
-        type: 'error',
-        message: 'Ошибка при получении писем',
-        error: err.message
-      });
+      console.error('Ошибка при получении писем:', err);
+      imap.end();
       reject(err);
     });
 
-    fetch.once('end', () => {
-      imap.end();
-      
-      this.saveLog({
-        type: 'success',
-        message: `Обработано писем: ${results.totalEmails}, найдено файлов: ${results.totalFiles}`,
-        details: results
-      });
-
-      resolve(results);
-    });
+    // Таймаут на случай зависания
+    setTimeout(() => {
+      console.log('⏰ Таймаут обработки писем');
+      if (processedCount < messageIds.length) {
+        imap.end();
+        reject(new Error('Таймаут обработки писем'));
+      }
+    }, 30000); // 30 секунд
   }
 
   // Проверка, является ли файл Excel файлом
@@ -260,6 +374,26 @@ class EmailService {
 
   // Сохранение вложения
   async saveAttachment(attachment, emailInfo) {
+    // Проверяем, существует ли уже такой файл
+    const existingFiles = await this.getEmailFiles();
+    const emailDate = emailInfo.date || new Date();
+    const emailFrom = emailInfo.from?.text || emailInfo.from || 'Неизвестно';
+    const emailSubject = emailInfo.subject || 'Без темы';
+    
+    // Ищем дублирующийся файл по имени, размеру, отправителю и теме
+    // Это позволяет сохранять файлы с одинаковыми именами из разных писем
+    const existingFile = existingFiles.find(file => 
+      file.originalName === attachment.filename &&
+      file.size === attachment.size &&
+      file.emailFrom === emailFrom &&
+      file.emailSubject === emailSubject
+    );
+    
+    if (existingFile) {
+      console.log(`Файл ${attachment.filename} из письма "${emailSubject}" от ${emailFrom} уже существует, пропускаем`);
+      return null; // Возвращаем null чтобы указать что файл не был сохранен
+    }
+    
     const filename = `${Date.now()}_${attachment.filename}`;
     const filepath = path.join(this.uploadsDir, filename);
     
@@ -273,13 +407,43 @@ class EmailService {
       size: attachment.size,
       emailFrom: emailInfo.from?.text || 'Неизвестно',
       emailSubject: emailInfo.subject || 'Без темы',
-      emailDate: emailInfo.date || new Date(),
+      emailDate: emailDate,
       processedAt: new Date().toISOString(),
       source: 'email'
     };
 
     const metadataPath = path.join(this.uploadsDir, `${filename}.meta.json`);
     await fs.writeJson(metadataPath, metadata, { spaces: 2 });
+
+    console.log(`Сохранен новый файл: ${attachment.filename}`);
+
+    // Обрабатываем Excel файл для извлечения данных рейсов
+    try {
+      console.log(`🔄 Начинаем обработку Excel файла: ${attachment.filename}`);
+      const fileProcessor = require('./fileProcessor');
+      const processedData = await fileProcessor.processEmailFile(metadata);
+      
+      if (processedData.success && processedData.flights.length > 0) {
+        console.log(`✅ Обработано ${processedData.flights.length} рейсов из файла ${attachment.filename}`);
+        metadata.flightsCount = processedData.flights.length;
+        metadata.status = 'completed';
+      } else {
+        console.log(`⚠️ Не удалось извлечь данные рейсов из файла ${attachment.filename}`);
+        metadata.flightsCount = 0;
+        metadata.status = 'error';
+        metadata.error = processedData.error || 'Не удалось извлечь данные рейсов';
+      }
+      
+      // Обновляем метаданные с информацией о количестве рейсов
+      await fs.writeJson(metadataPath, metadata, { spaces: 2 });
+      
+    } catch (error) {
+      console.error(`❌ Ошибка при обработке файла ${attachment.filename}:`, error);
+      metadata.flightsCount = 0;
+      metadata.status = 'error';
+      metadata.error = error.message;
+      await fs.writeJson(metadataPath, metadata, { spaces: 2 });
+    }
 
     return metadata;
   }

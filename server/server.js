@@ -6,7 +6,7 @@ const path = require('path');
 const cron = require('node-cron');
 const emailService = require('./services/emailService');
 const fileProcessor = require('./services/fileProcessor');
-const { initDatabase, testConnection } = require('./config/database');
+const { initDatabase, testConnection, query } = require('./config/database');
 const databaseService = require('./services/databaseService');
 
 const app = express();
@@ -65,16 +65,6 @@ app.post('/api/test-email-connection', async (req, res) => {
   }
 });
 
-// API для ручного получения писем
-app.post('/api/fetch-emails-manual', async (req, res) => {
-  try {
-    const result = await emailService.fetchEmailsWithAttachments();
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // API для получения логов почты
 app.get('/api/email-logs', (req, res) => {
   try {
@@ -114,10 +104,182 @@ app.get('/api/email-status', (req, res) => {
 // API для получения обработанных файлов из почты
 app.get('/api/email-files', async (req, res) => {
   try {
-    const processedFiles = await fileProcessor.getProcessedEmailFiles();
-    res.json(processedFiles);
+    // Получаем файлы из базы данных
+    const allFiles = await databaseService.getAllFiles();
+    
+    // Фильтруем только файлы из почты и преобразуем формат
+    const emailFiles = allFiles
+      .filter(file => file.source === 'email')
+      .map(file => {
+        // Безопасная обработка даты
+        let processedAt;
+        try {
+          if (file.uploadedAt && !isNaN(file.uploadedAt)) {
+            processedAt = new Date(file.uploadedAt).toISOString();
+          } else {
+            processedAt = new Date().toISOString(); // fallback на текущую дату
+          }
+        } catch (dateError) {
+          processedAt = new Date().toISOString();
+        }
+        
+        return {
+          id: file.id,
+          originalName: file.fileName,
+          size: file.size,
+          emailFrom: (file.author || '').replace('📧 ', '') || 'Неизвестно',
+          emailSubject: file.emailSubject || 'Без темы',
+          emailDate: file.emailDate || file.date,
+          processedAt: processedAt,
+          status: file.status || 'completed',
+          flightsCount: file.flightsCount || 0,
+          error: file.error
+        };
+      });
+    
+    res.json(emailFiles);
   } catch (error) {
+    console.error('Ошибка при получении файлов из почты:', error);
     res.status(500).json({ error: 'Ошибка при получении файлов из почты' });
+  }
+});
+
+// API для ручного получения новых писем из почты
+app.post('/api/fetch-emails-manual', async (req, res) => {
+  try {
+    console.log('Запуск ручного получения писем из почты...');
+    
+    const result = await emailService.fetchEmailsWithAttachments();
+    
+    // Подсчитываем новые и существующие файлы
+    const newFiles = result.processedFiles.filter(f => f.isNew).length;
+    const existingFiles = result.processedFiles.filter(f => !f.isNew).length;
+    
+    let message = `Получено ${result.totalEmails} писем`;
+    if (newFiles > 0) {
+      message += `, обработано ${newFiles} новых файлов`;
+    }
+    if (existingFiles > 0) {
+      message += `, найдено ${existingFiles} уже существующих файлов`;
+    }
+    if (newFiles === 0 && existingFiles === 0) {
+      message += ', файлы с вложениями не найдены';
+    }
+    
+    res.json({
+      success: true,
+      message: message,
+      data: result
+    });
+  } catch (error) {
+    console.error('Ошибка при ручном получении писем:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Ошибка при получении писем из почты',
+      details: error.message 
+    });
+  }
+});
+
+// API для диагностики базы данных
+app.get('/api/database-diagnostics', async (req, res) => {
+  try {
+    console.log('🔍 Запуск диагностики базы данных...');
+    
+    // Проверяем подключение к базе данных
+    const connectionTest = await query('SELECT NOW()');
+    
+    // Проверяем существование таблиц
+    const tablesResult = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name IN ('uploaded_files', 'flight_data')
+    `);
+    
+    const existingTables = tablesResult.rows.map(row => row.table_name);
+    
+    // Получаем статистику
+    const [filesCount, flightsCount] = await Promise.all([
+      query('SELECT COUNT(*) as count FROM uploaded_files'),
+      query('SELECT COUNT(*) as count FROM flight_data')
+    ]);
+    
+    // Получаем примеры данных
+    const [sampleFiles, sampleFlights] = await Promise.all([
+      query('SELECT * FROM uploaded_files ORDER BY created_at DESC LIMIT 5'),
+      query('SELECT * FROM flight_data ORDER BY created_at DESC LIMIT 5')
+    ]);
+    
+    // Получаем статистику по источникам
+    const sourceStats = await query(`
+      SELECT source, COUNT(*) as count 
+      FROM uploaded_files 
+      GROUP BY source
+    `);
+    
+    const flightSourceStats = await query(`
+      SELECT source, COUNT(*) as count 
+      FROM flight_data 
+      GROUP BY source
+    `);
+    
+    const diagnostics = {
+      database: {
+        connected: true,
+        connectionTime: connectionTest.rows[0],
+        tables: existingTables,
+        allTablesExist: existingTables.includes('uploaded_files') && existingTables.includes('flight_data')
+      },
+      statistics: {
+        totalFiles: parseInt(filesCount.rows[0].count),
+        totalFlights: parseInt(flightsCount.rows[0].count),
+        filesBySource: sourceStats.rows.reduce((acc, row) => {
+          acc[row.source] = parseInt(row.count);
+          return acc;
+        }, {}),
+        flightsBySource: flightSourceStats.rows.reduce((acc, row) => {
+          acc[row.source] = parseInt(row.count);
+          return acc;
+        }, {})
+      },
+      samples: {
+        recentFiles: sampleFiles.rows.map(file => ({
+          id: file.file_id,
+          fileName: file.file_name,
+          source: file.source,
+          status: file.status,
+          flightsCount: file.flights_count,
+          createdAt: file.created_at
+        })),
+        recentFlights: sampleFlights.rows.map(flight => ({
+          id: flight.flight_id,
+          number: flight.number,
+          date: flight.date,
+          departure: flight.departure,
+          arrival: flight.arrival,
+          source: flight.source,
+          sourceFile: flight.source_file,
+          createdAt: flight.created_at
+        }))
+      }
+    };
+    
+    console.log('✅ Диагностика базы данных завершена');
+    res.json({
+      success: true,
+      data: diagnostics
+    });
+    
+  } catch (error) {
+    console.error('❌ Ошибка диагностики базы данных:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка при диагностике базы данных',
+      details: error.message,
+      database: {
+        connected: false
+      }
+    });
   }
 });
 
@@ -226,6 +388,84 @@ app.post('/api/files', async (req, res) => {
   } catch (error) {
     console.error('Ошибка сохранения информации о файле:', error);
     res.status(500).json({ error: 'Ошибка сохранения информации о файле' });
+  }
+});
+
+// API для синхронизации файлов из файловой системы в PostgreSQL
+app.post('/api/sync-files-to-db', async (req, res) => {
+  try {
+    console.log('🔄 Запуск синхронизации файлов в PostgreSQL...');
+    
+    // Получаем файлы из файловой системы
+    const emailFiles = await emailService.getEmailFiles();
+    console.log(`📁 Найдено файлов в файловой системе: ${emailFiles.length}`);
+    
+    let syncedCount = 0;
+    let skippedCount = 0;
+    
+    for (const fileMetadata of emailFiles) {
+      try {
+        // Проверяем, есть ли файл в PostgreSQL
+        const existingFile = await databaseService.getFileByName(fileMetadata.originalName);
+        
+        if (!existingFile) {
+          // Создаем объект файла в формате для PostgreSQL
+          const fileInfo = {
+            id: Date.now() + Math.random() + syncedCount,
+            date: new Date(fileMetadata.processedAt).toLocaleDateString('ru-RU'),
+            fileName: fileMetadata.originalName,
+            size: fileProcessor.formatFileSize(fileMetadata.size),
+            author: `📧 ${fileMetadata.emailFrom}`,
+            uploadedAt: new Date(fileMetadata.processedAt).getTime(),
+            status: fileMetadata.status || 'completed',
+            flightsCount: fileMetadata.flightsCount || 0,
+            source: 'email',
+            emailSubject: fileMetadata.emailSubject,
+            emailDate: fileMetadata.emailDate
+          };
+          
+          // Сохраняем в PostgreSQL
+          await databaseService.saveFileInfo(fileInfo);
+          
+          // Если есть данные рейсов, обрабатываем файл заново
+          if (fileMetadata.filepath && fs.existsSync(fileMetadata.filepath)) {
+            try {
+              const flights = await fileProcessor.parseExcelFile(fileMetadata.filepath, fileMetadata.originalName);
+              if (flights && flights.length > 0) {
+                await databaseService.saveFlightData(flights);
+                console.log(`✅ Синхронизирован файл ${fileMetadata.originalName} с ${flights.length} рейсами`);
+              }
+            } catch (parseError) {
+              console.error(`⚠️ Ошибка парсинга файла ${fileMetadata.originalName}:`, parseError);
+            }
+          }
+          
+          syncedCount++;
+        } else {
+          skippedCount++;
+        }
+      } catch (error) {
+        console.error(`❌ Ошибка синхронизации файла ${fileMetadata.originalName}:`, error);
+      }
+    }
+    
+    console.log(`✅ Синхронизация завершена: синхронизировано ${syncedCount}, пропущено ${skippedCount}`);
+    
+    res.json({
+      success: true,
+      message: `Синхронизация завершена: синхронизировано ${syncedCount}, пропущено ${skippedCount}`,
+      data: {
+        syncedCount,
+        skippedCount,
+        totalFiles: emailFiles.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Ошибка синхронизации файлов:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

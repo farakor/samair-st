@@ -1,79 +1,162 @@
 [
   {
     "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
+    "message": "Обработано писем: 9, новых файлов: 1",
+    "timestamp": "2025-07-29T11:06:24.093Z",
     "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
+      "totalEmails": 9,
+      "totalFiles": 1,
+      "processedFiles": [
+        {
+          "filename": "test-1.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-1",
+          "date": "2025-07-28T14:22:46.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-2.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-2",
+          "date": "2025-07-28T14:31:24.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-3.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-3",
+          "date": "2025-07-28T14:32:52.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-4.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-4",
+          "date": "2025-07-28T14:34:55.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-5.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-5",
+          "date": "2025-07-28T14:46:04.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-6.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-6",
+          "date": "2025-07-28T14:47:27.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-7.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-7",
+          "date": "2025-07-28T14:53:39.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-8.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-8",
+          "date": "2025-07-29T11:00:25.000Z",
+          "isNew": false
+        },
+        {
+          "filename": "test-9.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-9",
+          "date": "2025-07-29T11:05:43.000Z",
+          "isNew": true
+        }
+      ],
       "errors": []
-    },
-    "timestamp": "2025-07-17T20:09:24.419Z"
+    }
   },
   {
     "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
+    "message": "Обработано писем: 8, новых файлов: 8",
+    "timestamp": "2025-07-29T11:04:39.669Z",
     "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
+      "totalEmails": 8,
+      "totalFiles": 8,
+      "processedFiles": [
+        {
+          "filename": "test-1.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-1",
+          "date": "2025-07-28T14:22:46.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-2.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-2",
+          "date": "2025-07-28T14:31:24.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-5.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-5",
+          "date": "2025-07-28T14:46:04.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-7.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-7",
+          "date": "2025-07-28T14:53:39.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-3.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-3",
+          "date": "2025-07-28T14:32:52.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-4.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-4",
+          "date": "2025-07-28T14:34:55.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-6.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-6",
+          "date": "2025-07-28T14:47:27.000Z",
+          "isNew": true
+        },
+        {
+          "filename": "test-8.xls",
+          "size": 194048,
+          "from": "\"Farrukh Oripov\" <farrukh.oripov@gmail.com>",
+          "subject": "test-8",
+          "date": "2025-07-29T11:00:25.000Z",
+          "isNew": true
+        }
+      ],
       "errors": []
-    },
-    "timestamp": "2025-07-17T20:08:17.974Z"
-  },
-  {
-    "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
-    "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
-      "errors": []
-    },
-    "timestamp": "2025-07-17T20:04:49.985Z"
-  },
-  {
-    "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
-    "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
-      "errors": []
-    },
-    "timestamp": "2025-07-17T20:04:34.966Z"
-  },
-  {
-    "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
-    "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
-      "errors": []
-    },
-    "timestamp": "2025-07-17T20:00:20.685Z"
-  },
-  {
-    "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
-    "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
-      "errors": []
-    },
-    "timestamp": "2025-07-17T20:00:08.602Z"
-  },
-  {
-    "type": "success",
-    "message": "Обработано писем: 2, найдено файлов: 0",
-    "details": {
-      "totalEmails": 2,
-      "totalFiles": 0,
-      "processedFiles": [],
-      "errors": []
-    },
-    "timestamp": "2025-07-17T19:59:40.853Z"
+    }
   }
 ]

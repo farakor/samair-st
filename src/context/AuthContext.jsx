@@ -25,23 +25,49 @@ const generatePassword = () => {
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers] = useState(() => {
+  const [users, setUsers] = useState([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Инициализация пользователей и сессии
+  useEffect(() => {
+    console.log('🔄 Инициализация AuthContext...');
+
+    // Загружаем пользователей из localStorage
     const savedUsers = localStorage.getItem('systemUsers');
-    return savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS;
-  });
+    const loadedUsers = savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS;
+    setUsers(loadedUsers);
 
-  // Сохраняем пользователей в localStorage при изменении
-  useEffect(() => {
-    localStorage.setItem('systemUsers', JSON.stringify(users));
-  }, [users]);
-
-  // Проверяем, залогинен ли пользователь при загрузке
-  useEffect(() => {
+    // Восстанавливаем текущего пользователя
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
+      try {
+        const user = JSON.parse(savedUser);
+        // Проверяем, существует ли такой пользователь в системе
+        const existingUser = loadedUsers.find(u => u.id === user.id && u.email === user.email);
+        if (existingUser) {
+          console.log('✅ Восстанавливаем пользователя из localStorage:', user.email);
+          setCurrentUser(user);
+        } else {
+          console.log('⚠️ Пользователь из localStorage не найден в системе, очищаем сессию');
+          localStorage.removeItem('currentUser');
+        }
+      } catch (error) {
+        console.error('❌ Ошибка при восстановлении пользователя из localStorage:', error);
+        localStorage.removeItem('currentUser');
+      }
     }
+
+    setIsInitialized(true);
+    console.log('✅ AuthContext инициализирован');
   }, []);
+
+  // Сохраняем пользователей в localStorage при изменении (только после инициализации)
+  useEffect(() => {
+    if (isInitialized) {
+      localStorage.setItem('systemUsers', JSON.stringify(users));
+      console.log('💾 Пользователи сохранены в localStorage');
+    }
+  }, [users, isInitialized]);
 
   const login = (email, password) => {
     const user = users.find(u => u.email === email && u.password === password);
@@ -137,6 +163,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       currentUser,
       isAuthenticated: !!currentUser,
+      isInitialized,
       login,
       logout,
       isSuperAdmin,

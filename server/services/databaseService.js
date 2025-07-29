@@ -4,10 +4,12 @@ class DatabaseService {
   // Сохранение информации о файле
   async saveFileInfo(fileInfo) {
     try {
+      console.log(`💾 Начинаем сохранение информации о файле: ${fileInfo.fileName}`);
+      
       const result = await query(
         `INSERT INTO uploaded_files 
-         (file_id, date, file_name, size, author, uploaded_at, status, flights_count, source, file_info)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (file_id, date, file_name, size, author, uploaded_at, status, flights_count, source, file_info, email_subject, email_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (file_id) DO UPDATE SET
          status = EXCLUDED.status,
          flights_count = EXCLUDED.flights_count,
@@ -23,12 +25,16 @@ class DatabaseService {
           fileInfo.status,
           fileInfo.flightsCount || 0,
           fileInfo.source || 'manual',
-          JSON.stringify(fileInfo.fileInfo || {})
+          JSON.stringify(fileInfo.fileInfo || {}),
+          fileInfo.emailSubject || null,
+          fileInfo.emailDate || null
         ]
       );
+      
+      console.log(`✅ Информация о файле ${fileInfo.fileName} успешно сохранена в PostgreSQL`);
       return result.rows[0];
     } catch (error) {
-      console.error('Ошибка сохранения информации о файле:', error);
+      console.error('❌ Ошибка сохранения информации о файле:', error);
       throw error;
     }
   }
@@ -50,7 +56,9 @@ class DatabaseService {
         flightsCount: row.flights_count,
         error: row.error_message,
         source: row.source,
-        fileInfo: row.file_info
+        fileInfo: row.file_info,
+        emailSubject: row.email_subject,
+        emailDate: row.email_date
       }));
     } catch (error) {
       console.error('Ошибка получения файлов:', error);
@@ -72,8 +80,26 @@ class DatabaseService {
   // Сохранение данных рейсов
   async saveFlightData(flights) {
     try {
+      console.log(`💾 Начинаем сохранение ${flights.length} рейсов в PostgreSQL...`);
+      
+      if (!flights || flights.length === 0) {
+        console.log('⚠️ Массив рейсов пустой, сохранение не требуется');
+        return;
+      }
+
+      // Проверяем подключение к базе данных
+      try {
+        await query('SELECT 1');
+        console.log('✅ Подключение к PostgreSQL активно');
+      } catch (connectionError) {
+        console.error('❌ Ошибка подключения к PostgreSQL:', connectionError);
+        throw new Error(`Нет подключения к базе данных: ${connectionError.message}`);
+      }
+
       const values = [];
       const placeholders = [];
+      
+      console.log(`🔄 Подготавливаем данные для вставки...`);
       
       flights.forEach((flight, index) => {
         const baseIndex = index * 17;
@@ -100,6 +126,11 @@ class DatabaseService {
           flight.uploadedAt || Date.now(),
           flight.source || 'manual'
         );
+        
+        // Логируем каждый 10-й рейс для контроля
+        if (index % 10 === 0) {
+          console.log(`📝 Обрабатываем рейс ${index + 1}/${flights.length}: ${flight.number} (${flight.date})`);
+        }
       });
 
       if (values.length > 0) {
@@ -108,13 +139,45 @@ class DatabaseService {
           (flight_id, number, date, aircraft_type, departure, arrival, departure_time, arrival_time, flight_time, configuration, passengers, pax_percentage, baggage, crew, source_file, uploaded_at, source)
           VALUES ${placeholders.join(', ')}
           ON CONFLICT (flight_id) DO NOTHING
+          RETURNING flight_id
         `;
         
-        await query(queryText, values);
-        console.log(`Сохранено ${flights.length} рейсов в базу данных`);
+        console.log(`🚀 Выполняем SQL запрос для вставки ${flights.length} рейсов...`);
+        console.log(`📄 SQL запрос: ${queryText.substring(0, 200)}...`);
+        
+        const result = await query(queryText, values);
+        
+        const insertedCount = result.rows.length;
+        const duplicatesCount = flights.length - insertedCount;
+        
+        console.log(`✅ Успешно вставлено ${insertedCount} новых рейсов в PostgreSQL`);
+        if (duplicatesCount > 0) {
+          console.log(`⏭️ Пропущено ${duplicatesCount} дублирующихся рейсов`);
+        }
+        
+        // Проверяем, что данные действительно сохранились
+        const countResult = await query('SELECT COUNT(*) as count FROM flight_data WHERE source_file = $1', [flights[0].sourceFile]);
+        const savedCount = parseInt(countResult.rows[0].count);
+        console.log(`🔍 Проверка: в базе данных найдено ${savedCount} рейсов для файла ${flights[0].sourceFile}`);
+        
+      } else {
+        console.log('⚠️ Нет данных для сохранения после обработки');
       }
+      
     } catch (error) {
-      console.error('Ошибка сохранения данных рейсов:', error);
+      console.error('❌ Критическая ошибка сохранения данных рейсов:', error);
+      console.error('❌ Стек ошибки:', error.stack);
+      
+      // Логируем дополнительную информацию для диагностики
+      if (flights && flights.length > 0) {
+        console.error(`❌ Информация о первом рейсе:`, {
+          id: flights[0].id,
+          number: flights[0].number,
+          date: flights[0].date,
+          sourceFile: flights[0].sourceFile
+        });
+      }
+      
       throw error;
     }
   }
@@ -232,6 +295,20 @@ class DatabaseService {
       return result.rowCount;
     } catch (error) {
       console.error('Ошибка удаления рейсов по файлу:', error);
+      throw error;
+    }
+  }
+
+  // Получение файла по имени
+  async getFileByName(fileName) {
+    try {
+      const result = await query(
+        'SELECT * FROM uploaded_files WHERE file_name = $1 LIMIT 1',
+        [fileName]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Ошибка получения файла по имени:', error);
       throw error;
     }
   }
