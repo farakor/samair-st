@@ -236,7 +236,7 @@ export default function UsersManagement() {
         updateUser(editingUser.id, userData);
         setError('');
       } else {
-        const result = addUser(userData);
+        const result = await addUser(userData);
         setNewCredentials({
           email: result.email,
           password: result.generatedPassword
@@ -360,10 +360,10 @@ export default function UsersManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${user.role === 'superadmin'
-                          ? 'bg-orange-100 text-orange-800'
-                          : user.role === 'full_access'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-blue-100 text-blue-800'
+                        ? 'bg-orange-100 text-orange-800'
+                        : user.role === 'full_access'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-blue-100 text-blue-800'
                         }`}>
                         {ROLE_LABELS[user.role]}
                       </span>

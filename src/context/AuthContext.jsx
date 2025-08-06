@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
     return currentUser?.role === 'superadmin' || currentUser?.role === 'full_access';
   };
 
-  const addUser = (userData) => {
+  const addUser = async (userData) => {
     if (!isSuperAdmin()) {
       throw new Error('Только суперадмин может добавлять пользователей');
     }
@@ -119,7 +119,34 @@ export const AuthProvider = ({ children }) => {
 
     setUsers(prev => [...prev, newUser]);
 
-    // Возвращаем пароль для отображения (в реальной системе отправляли бы на email)
+    // Отправляем приветственное письмо
+    try {
+      const response = await fetch('http://localhost:3001/api/send-welcome-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userEmail: newUser.email,
+          userName: newUser.name,
+          password: password
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Ошибка отправки приветственного письма:', errorData.error);
+        // Не прерываем создание пользователя, просто логируем ошибку
+      } else {
+        const result = await response.json();
+        console.log('Приветственное письмо отправлено:', result.message);
+      }
+    } catch (error) {
+      console.error('Ошибка при отправке приветственного письма:', error);
+      // Не прерываем создание пользователя, просто логируем ошибку
+    }
+
+    // Возвращаем пароль для отображения 
     return { ...newUser, generatedPassword: password };
   };
 

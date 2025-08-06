@@ -206,11 +206,16 @@ export default function EmailLogs() {
               <h3 className="text-lg font-medium text-gray-900 mb-4">Статус автоматического сбора</h3>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-sm text-blue-600 font-medium">Статус</p>
-                  <p className="text-lg font-semibold text-blue-900">
+                <div className={`p-3 rounded-lg ${status.isEnabled ? 'bg-blue-50' : 'bg-red-50'}`}>
+                  <p className={`text-sm font-medium ${status.isEnabled ? 'text-blue-600' : 'text-red-600'}`}>Статус</p>
+                  <p className={`text-lg font-semibold ${status.isEnabled ? 'text-blue-900' : 'text-red-900'}`}>
                     {status.isEnabled ? 'Включен' : 'Отключен'}
                   </p>
+                  {status.lastError && (
+                    <p className="text-xs text-red-600 mt-1" title={status.lastError}>
+                      Последняя ошибка
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-green-50 p-3 rounded-lg">

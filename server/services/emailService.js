@@ -1,5 +1,6 @@
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
+const nodemailer = require('nodemailer');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -19,6 +20,141 @@ class EmailService {
       return fs.readJsonSync(configPath);
     }
     throw new Error('Конфигурация почты не найдена. Настройте подключение к почте.');
+  }
+
+  // Загрузка SMTP конфигурации
+  loadSMTPConfig() {
+    const configPath = path.join(this.configDir, 'smtp.json');
+    if (fs.existsSync(configPath)) {
+      return fs.readJsonSync(configPath);
+    }
+    throw new Error('SMTP конфигурация не найдена. Настройте SMTP подключение.');
+  }
+
+  // Сохранение SMTP конфигурации
+  saveSMTPConfig(config) {
+    const configPath = path.join(this.configDir, 'smtp.json');
+    fs.writeJsonSync(configPath, config, { spaces: 2 });
+  }
+
+  // Создание SMTP транспорта
+  createSMTPTransporter(config = null) {
+    const smtpConfig = config || this.loadSMTPConfig();
+    
+    return nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure, // true для 465, false для других портов
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.password,
+      },
+      tls: {
+        rejectUnauthorized: false // для самоподписанных сертификатов
+      }
+    });
+  }
+
+  // Тестирование SMTP соединения
+  async testSMTPConnection(config) {
+    try {
+      const transporter = this.createSMTPTransporter(config);
+      await transporter.verify();
+      
+      await this.saveLog({
+        type: 'success',
+        message: 'SMTP подключение протестировано успешно'
+      });
+
+      return { 
+        success: true, 
+        message: 'SMTP подключение прошло успешно' 
+      };
+    } catch (error) {
+      console.error('SMTP ошибка:', error);
+      
+      await this.saveLog({
+        type: 'error',
+        message: 'Ошибка тестирования SMTP подключения',
+        error: error.message
+      });
+
+      throw new Error(`Ошибка SMTP подключения: ${error.message}`);
+    }
+  }
+
+  // Загрузка HTML шаблона
+  loadEmailTemplate() {
+    const templatePath = path.join(__dirname, '../../email-temp/welcome_user_template.html');
+    if (fs.existsSync(templatePath)) {
+      return fs.readFileSync(templatePath, 'utf8');
+    }
+    throw new Error(`HTML шаблон письма не найден по пути: ${templatePath}`);
+  }
+
+  // Отправка письма с паролем новому пользователю
+  async sendWelcomeEmail(userEmail, userName, password) {
+    try {
+      const transporter = this.createSMTPTransporter();
+      const smtpConfig = this.loadSMTPConfig();
+
+      // Загружаем HTML шаблон и заменяем переменные
+      let htmlTemplate = this.loadEmailTemplate();
+      htmlTemplate = htmlTemplate.replace(/{{userName}}/g, userName);
+      htmlTemplate = htmlTemplate.replace(/{{userEmail}}/g, userEmail);
+      htmlTemplate = htmlTemplate.replace(/{{password}}/g, password);
+
+      const mailOptions = {
+        from: `"${smtpConfig.fromName || 'Air Samarkand System'}" <${smtpConfig.user}>`,
+        to: userEmail,
+        subject: 'Добро пожаловать в систему Air Samarkand',
+        html: htmlTemplate,
+        attachments: [
+          {
+            filename: 'air-samarkand-logo.png',
+            path: path.join(__dirname, '../../email-temp/images/air-samarkand-logo.png'),
+            cid: 'air-samarkand-logo'
+          },
+          {
+            filename: 'person-24-light.png',
+            path: path.join(__dirname, '../../email-temp/images/person-24-light.png'),
+            cid: 'person-24-light'
+          },
+          {
+            filename: 'vpn_key-48-primary.png',
+            path: path.join(__dirname, '../../email-temp/images/vpn_key-48-primary.png'),
+            cid: 'vpn_key-48-primary'
+          }
+        ]
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      
+      await this.saveLog({
+        type: 'success',
+        message: `Приветственное письмо отправлено пользователю ${userName} (${userEmail})`,
+        details: {
+          to: userEmail,
+          messageId: result.messageId
+        }
+      });
+
+      return { 
+        success: true, 
+        message: 'Письмо с паролем отправлено успешно',
+        messageId: result.messageId
+      };
+    } catch (error) {
+      console.error('Ошибка отправки приветственного письма:', error);
+      
+      await this.saveLog({
+        type: 'error',
+        message: `Ошибка отправки приветственного письма пользователю ${userName} (${userEmail})`,
+        error: error.message
+      });
+
+      throw new Error(`Ошибка отправки письма: ${error.message}`);
+    }
   }
 
   // Сохранение лога

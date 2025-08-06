@@ -65,6 +65,64 @@ app.post('/api/test-email-connection', async (req, res) => {
   }
 });
 
+// API для настройки SMTP
+app.get('/api/smtp-config', (req, res) => {
+  try {
+    const configPath = path.join(configDir, 'smtp.json');
+    if (fs.existsSync(configPath)) {
+      const config = fs.readJsonSync(configPath);
+      // Не отправляем пароль обратно
+      const safeConfig = { ...config };
+      delete safeConfig.password;
+      res.json(safeConfig);
+    } else {
+      res.json({});
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка при загрузке SMTP настроек' });
+  }
+});
+
+app.post('/api/smtp-config', (req, res) => {
+  try {
+    const config = req.body;
+    emailService.saveSMTPConfig(config);
+    res.json({ success: true, message: 'SMTP настройки сохранены' });
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка при сохранении SMTP настроек' });
+  }
+});
+
+// API для тестирования SMTP подключения
+app.post('/api/test-smtp-connection', async (req, res) => {
+  try {
+    const config = req.body;
+    const result = await emailService.testSMTPConnection(config);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API для отправки приветственного письма
+app.post('/api/send-welcome-email', async (req, res) => {
+  try {
+    const { userEmail, userName, password } = req.body;
+    
+    if (!userEmail || !userName || !password) {
+      return res.status(400).json({ 
+        error: 'Не все обязательные поля переданы (userEmail, userName, password)' 
+      });
+    }
+
+    const result = await emailService.sendWelcomeEmail(userEmail, userName, password);
+    res.json(result);
+  } catch (error) {
+    console.error('Ошибка отправки приветственного письма:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API для получения логов почты
 app.get('/api/email-logs', (req, res) => {
   try {
@@ -166,6 +224,24 @@ app.post('/api/fetch-emails-manual', async (req, res) => {
       message += ', файлы с вложениями не найдены';
     }
     
+    // Обновляем статус после ручного запуска
+    try {
+      const statusPath = path.join(configDir, 'email-status.json');
+      const currentStatus = fs.existsSync(statusPath) ? fs.readJsonSync(statusPath) : {};
+      const updatedStatus = {
+        ...currentStatus,
+        isEnabled: true,
+        lastRun: new Date().toISOString(),
+        nextRun: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        totalEmails: (currentStatus.totalEmails || 0) + (result.totalEmails || 0),
+        totalFiles: (currentStatus.totalFiles || 0) + newFiles
+      };
+      fs.writeJsonSync(statusPath, updatedStatus, { spaces: 2 });
+      console.log('✅ Статус обновлен после ручного запуска');
+    } catch (statusError) {
+      console.error('❌ Ошибка обновления статуса:', statusError);
+    }
+    
     res.json({
       success: true,
       message: message,
@@ -173,6 +249,23 @@ app.post('/api/fetch-emails-manual', async (req, res) => {
     });
   } catch (error) {
     console.error('Ошибка при ручном получении писем:', error);
+    
+    // Обновляем статус с ошибкой при ручном запуске
+    try {
+      const statusPath = path.join(configDir, 'email-status.json');
+      const currentStatus = fs.existsSync(statusPath) ? fs.readJsonSync(statusPath) : {};
+      const errorStatus = {
+        ...currentStatus,
+        isEnabled: true,
+        lastRun: new Date().toISOString(),
+        nextRun: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        lastError: error.message
+      };
+      fs.writeJsonSync(statusPath, errorStatus, { spaces: 2 });
+    } catch (statusError) {
+      console.error('Ошибка обновления статуса:', statusError);
+    }
+    
     res.status(500).json({ 
       success: false,
       error: 'Ошибка при получении писем из почты',
@@ -283,6 +376,35 @@ app.get('/api/database-diagnostics', async (req, res) => {
   }
 });
 
+// Функция для инициализации статуса автоматического сбора
+const initializeEmailStatus = () => {
+  try {
+    const statusPath = path.join(configDir, 'email-status.json');
+    
+    if (!fs.existsSync(statusPath)) {
+      console.log('🔧 Инициализация статуса автоматического сбора...');
+      const initialStatus = {
+        isEnabled: true,
+        lastRun: null,
+        nextRun: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        totalEmails: 0,
+        totalFiles: 0
+      };
+      fs.writeJsonSync(statusPath, initialStatus, { spaces: 2 });
+      console.log('✅ Статус автоматического сбора инициализирован');
+    } else {
+      // Обновляем время следующего запуска при старте сервера
+      const currentStatus = fs.readJsonSync(statusPath);
+      currentStatus.nextRun = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      currentStatus.isEnabled = true;
+      fs.writeJsonSync(statusPath, currentStatus, { spaces: 2 });
+      console.log('✅ Статус автоматического сбора обновлен');
+    }
+  } catch (error) {
+    console.error('❌ Ошибка инициализации статуса:', error);
+  }
+};
+
 // Планировщик для ежедневного получения писем (каждый день в 9:00)
 cron.schedule('0 9 * * *', async () => {
   console.log('Запуск автоматического получения писем...');
@@ -302,6 +424,24 @@ cron.schedule('0 9 * * *', async () => {
     fs.writeJsonSync(statusPath, status, { spaces: 2 });
   } catch (error) {
     console.error('Ошибка при автоматическом получении писем:', error);
+    
+    // Обновляем статус с ошибкой
+    try {
+      const statusPath = path.join(configDir, 'email-status.json');
+      const currentStatus = fs.existsSync(statusPath) ? fs.readJsonSync(statusPath) : {};
+      const errorStatus = {
+        ...currentStatus,
+        isEnabled: true,
+        lastRun: new Date().toISOString(),
+        nextRun: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        lastError: error.message,
+        totalEmails: currentStatus.totalEmails || 0,
+        totalFiles: currentStatus.totalFiles || 0
+      };
+      fs.writeJsonSync(statusPath, errorStatus, { spaces: 2 });
+    } catch (statusError) {
+      console.error('Ошибка обновления статуса:', statusError);
+    }
   }
 });
 
@@ -489,6 +629,9 @@ app.listen(PORT, async () => {
   } else {
     console.warn('Сервер работает без подключения к PostgreSQL');
   }
+  
+  // Инициализируем статус автоматического сбора
+  initializeEmailStatus();
   
   console.log('Планировщик писем настроен на 9:00 каждый день');
 });
