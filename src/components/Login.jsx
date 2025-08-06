@@ -108,21 +108,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="min-h-screen bg-white flex flex-col lg:flex-row">
       {/* Левая часть */}
-      <div className="w-1/2 flex flex-col">
-        <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full px-8">
-          <div className="mb-16">
+      <div className="w-full lg:w-1/2 flex flex-col">
+        <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full px-4 sm:px-8">
+          <div className="mb-8 sm:mb-16">
             <div className="flex justify-start">
-              <img src="/logo.png" alt="Air Samarkand" className="w-full max-w-[280px]" />
+              <img src="/logo.png" alt="Air Samarkand" className="w-full max-w-[200px] sm:max-w-[280px]" />
             </div>
           </div>
 
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-2">
               Войти
             </h1>
-            <p className="text-gray-600 mb-8">
+            <p className="text-gray-600 mb-6 sm:mb-8">
               Добро пожаловать. Пожалуйста войдите в учетную запись
             </p>
 
@@ -181,13 +181,13 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="p-8 text-sm text-gray-600">
+        <div className="p-4 sm:p-8 text-sm text-gray-600">
           © SamAir LLC 2025
         </div>
       </div>
 
       {/* Правая часть */}
-      <div className="w-1/2 bg-[#1B3B7B] flex flex-col items-center justify-center p-12">
+      <div className="hidden lg:flex w-full lg:w-1/2 bg-[#1B3B7B] flex-col items-center justify-center p-6 sm:p-12">
         <div className="max-w-md w-full">
           {/* Карточка количества рейсов */}
           <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 mb-6">

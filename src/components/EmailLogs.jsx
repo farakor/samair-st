@@ -51,7 +51,7 @@ export default function EmailLogs() {
     return (
       <div className="flex">
         <Sidebar />
-        <div className="flex-1 ml-64 p-8">
+        <div className="flex-1 lg:ml-64 p-4 sm:p-8 pt-20 lg:pt-8">
           <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded">
             <p className="font-medium">Доступ запрещен</p>
             <p className="text-sm mt-1">
@@ -191,9 +191,9 @@ export default function EmailLogs() {
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
 
-      <div className="ml-64 p-6">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900">Логи автоматического получения писем</h2>
+      <div className="lg:ml-64 p-4 sm:p-6 pt-20 lg:pt-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Логи автоматического получения писем</h2>
           <p className="text-sm text-gray-500 mt-1">
             Просмотр результатов автоматического получения XLS файлов из почты
           </p>
@@ -205,7 +205,7 @@ export default function EmailLogs() {
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">Статус автоматического сбора</h3>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className={`p-3 rounded-lg ${status.isEnabled ? 'bg-blue-50' : 'bg-red-50'}`}>
                   <p className={`text-sm font-medium ${status.isEnabled ? 'text-blue-600' : 'text-red-600'}`}>Статус</p>
                   <p className={`text-lg font-semibold ${status.isEnabled ? 'text-blue-900' : 'text-red-900'}`}>
@@ -243,30 +243,7 @@ export default function EmailLogs() {
               )}
             </div>
 
-            <div className="flex space-x-2">
-              <button
-                onClick={manualFetch}
-                disabled={manualFetchLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                {manualFetchLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Получаем...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Запустить вручную
-                  </>
-                )}
-              </button>
-
+            <div className="flex flex-col space-y-2">
               <button
                 onClick={runDiagnostics}
                 disabled={diagnosticsLoading}
@@ -286,6 +263,29 @@ export default function EmailLogs() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Диагностика БД
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={manualFetch}
+                disabled={manualFetchLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {manualFetchLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Получаем...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Запустить вручную
                   </>
                 )}
               </button>

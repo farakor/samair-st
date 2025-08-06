@@ -1,5 +1,38 @@
 [
   {
+    "type": "info",
+    "message": "Новые письма с вложениями не найдены",
+    "timestamp": "2025-08-06T19:28:16.310Z"
+  },
+  {
+    "type": "info",
+    "message": "Новые письма с вложениями не найдены",
+    "timestamp": "2025-08-06T19:25:03.111Z"
+  },
+  {
+    "type": "success",
+    "message": "Приветственное письмо отправлено пользователю TEST 888 (farrukh.oripov@dfservice.ru)",
+    "details": {
+      "to": "farrukh.oripov@dfservice.ru",
+      "messageId": "<543c6a44-bfed-3e05-a00c-9a11ac3fc062@samair.uz>"
+    },
+    "timestamp": "2025-08-06T19:00:30.092Z"
+  },
+  {
+    "type": "info",
+    "message": "Новые письма с вложениями не найдены",
+    "timestamp": "2025-08-06T18:50:44.470Z"
+  },
+  {
+    "type": "success",
+    "message": "Приветственное письмо отправлено пользователю Дамир Моисеев (damir.moiseev@samair.uz)",
+    "details": {
+      "to": "damir.moiseev@samair.uz",
+      "messageId": "<6d9633da-5bae-084e-2caa-7e9d6c043b54@samair.uz>"
+    },
+    "timestamp": "2025-08-06T16:01:23.227Z"
+  },
+  {
     "type": "success",
     "message": "Приветственное письмо отправлено пользователю ТЕСТ 22 (farrukh.oripov@samair.uz)",
     "details": {

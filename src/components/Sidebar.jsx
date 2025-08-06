@@ -1,113 +1,161 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar() {
   const location = useLocation();
   const { logout, isSuperAdmin, canAccessUpload } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
 
   const isActive = (path) => {
     return location.pathname === path;
   };
 
+  const toggleSidebar = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const closeSidebar = () => {
+    setIsOpen(false);
+  };
+
   return (
-    <div className="w-64 bg-white h-screen flex flex-col border-r fixed left-0 top-0 z-10">
-      <div className="p-4 mb-1 flex justify-center">
-        <img src="/logo.png" alt="Air Samarkand" className="h-8" />
+    <>
+      {/* Мобильная кнопка гамбургер */}
+      <button
+        onClick={toggleSidebar}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-white shadow-lg border border-gray-200 hover:bg-gray-50"
+        aria-label="Открыть меню"
+      >
+        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {isOpen ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+          )}
+        </svg>
+      </button>
+
+      {/* Overlay для мобильных устройств */}
+      {isOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          onClick={closeSidebar}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`
+        w-64 bg-white h-screen flex flex-col border-r fixed left-0 top-0 z-40 transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0 lg:z-10
+      `}>
+        <div className="p-4 mb-1 flex justify-center">
+          <img src="/logo.png" alt="Air Samarkand" className="h-8" />
+        </div>
+
+        <nav className="flex-1">
+          <Link
+            to="/"
+            onClick={closeSidebar}
+            className={`flex items-center px-4 py-3 text-sm ${isActive('/') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+          >
+            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Дашборд
+          </Link>
+
+          <Link
+            to="/table"
+            onClick={closeSidebar}
+            className={`flex items-center px-4 py-3 text-sm ${isActive('/table') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+          >
+            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Таблица
+          </Link>
+
+          {/* Раздел загрузки данных - только для пользователей с полным доступом */}
+          {canAccessUpload() && (
+            <Link
+              to="/upload"
+              onClick={closeSidebar}
+              className={`flex items-center px-4 py-3 text-sm ${isActive('/upload') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+            >
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Загрузка данных
+            </Link>
+          )}
+
+          {/* Настройки почты - только для пользователей с полным доступом */}
+          {canAccessUpload() && (
+            <Link
+              to="/email-settings"
+              onClick={closeSidebar}
+              className={`flex items-center px-4 py-3 text-sm ${isActive('/email-settings') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+            >
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Настройки почты
+            </Link>
+          )}
+
+          {/* Логи почты - только для пользователей с полным доступом */}
+          {canAccessUpload() && (
+            <Link
+              to="/email-logs"
+              onClick={closeSidebar}
+              className={`flex items-center px-4 py-3 text-sm ${isActive('/email-logs') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+            >
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Логи почты
+            </Link>
+          )}
+
+          {/* Раздел управления пользователями - только для суперадмина */}
+          {isSuperAdmin() && (
+            <Link
+              to="/users"
+              onClick={closeSidebar}
+              className={`flex items-center px-4 py-3 text-sm ${isActive('/users') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+            >
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Пользователи и права
+            </Link>
+          )}
+        </nav>
+
+        {/* Кнопка выхода */}
+        <div className="border-t border-gray-200 p-4">
+          <button
+            onClick={() => {
+              logout();
+              closeSidebar();
+            }}
+            className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="font-medium">Выйти</span>
+          </button>
+        </div>
       </div>
-
-      <nav className="flex-1">
-        <Link
-          to="/"
-          className={`flex items-center px-4 py-3 text-sm ${isActive('/') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-        >
-          <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          Дашборд
-        </Link>
-
-        <Link
-          to="/table"
-          className={`flex items-center px-4 py-3 text-sm ${isActive('/table') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-        >
-          <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          Таблица
-        </Link>
-
-        {/* Раздел загрузки данных - только для пользователей с полным доступом */}
-        {canAccessUpload() && (
-          <Link
-            to="/upload"
-            className={`flex items-center px-4 py-3 text-sm ${isActive('/upload') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Загрузка данных
-          </Link>
-        )}
-
-        {/* Настройки почты - только для пользователей с полным доступом */}
-        {canAccessUpload() && (
-          <Link
-            to="/email-settings"
-            className={`flex items-center px-4 py-3 text-sm ${isActive('/email-settings') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            Настройки почты
-          </Link>
-        )}
-
-        {/* Логи почты - только для пользователей с полным доступом */}
-        {canAccessUpload() && (
-          <Link
-            to="/email-logs"
-            className={`flex items-center px-4 py-3 text-sm ${isActive('/email-logs') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Логи почты
-          </Link>
-        )}
-
-        {/* Раздел управления пользователями - только для суперадмина */}
-        {isSuperAdmin() && (
-          <Link
-            to="/users"
-            className={`flex items-center px-4 py-3 text-sm ${isActive('/users') ? 'bg-[#1B3B7B] text-white font-semibold' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            Пользователи и права
-          </Link>
-        )}
-      </nav>
-
-      {/* Кнопка выхода */}
-      <div className="border-t border-gray-200 p-4">
-        <button
-          onClick={logout}
-          className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-        >
-          <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          <span className="font-medium">Выйти</span>
-        </button>
-      </div>
-    </div>
+    </>
   );
 } 

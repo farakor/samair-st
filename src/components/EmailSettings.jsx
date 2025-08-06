@@ -76,7 +76,7 @@ export default function EmailSettings() {
     return (
       <div className="flex">
         <Sidebar />
-        <div className="flex-1 ml-64 p-8">
+        <div className="flex-1 lg:ml-64 p-4 sm:p-8 pt-20 lg:pt-8">
           <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded">
             <p className="font-medium">Доступ запрещен</p>
             <p className="text-sm mt-1">
@@ -253,9 +253,9 @@ export default function EmailSettings() {
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
 
-      <div className="ml-64 p-6">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900">Настройки почты</h2>
+      <div className="lg:ml-64 p-4 sm:p-6 pt-20 lg:pt-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Настройки почты</h2>
           <p className="text-sm text-gray-500 mt-1">
             Настройте подключение к почте и SMTP для отправки уведомлений
           </p>
@@ -268,8 +268,8 @@ export default function EmailSettings() {
               <button
                 onClick={() => setActiveTab('imap')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'imap'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
               >
                 IMAP (Получение)
@@ -277,8 +277,8 @@ export default function EmailSettings() {
               <button
                 onClick={() => setActiveTab('smtp')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'smtp'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
               >
                 SMTP (Отправка)

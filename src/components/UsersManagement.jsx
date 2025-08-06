@@ -15,6 +15,7 @@ const UserModal = ({ isOpen, onClose, onSave, user = null, isEdit = false }) => 
     role: 'read_only'
   });
   const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (user && isEdit) {
@@ -31,6 +32,7 @@ const UserModal = ({ isOpen, onClose, onSave, user = null, isEdit = false }) => 
       });
     }
     setErrors({});
+    setIsLoading(false); // Сбрасываем состояние загрузки при открытии/закрытии модального окна
   }, [user, isEdit, isOpen]);
 
   const validateForm = () => {
@@ -50,10 +52,15 @@ const UserModal = ({ isOpen, onClose, onSave, user = null, isEdit = false }) => 
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSave(formData);
+      setIsLoading(true);
+      try {
+        await onSave(formData);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -127,9 +134,39 @@ const UserModal = ({ isOpen, onClose, onSave, user = null, isEdit = false }) => 
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#1B3B7B] text-white rounded-md hover:bg-[#152f61]"
+              disabled={isLoading}
+              className={`px-4 py-2 text-white rounded-md flex items-center justify-center min-w-[100px] ${isLoading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-[#1B3B7B] hover:bg-[#152f61]'
+                }`}
             >
-              {isEdit ? 'Сохранить' : 'Добавить'}
+              {isLoading ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Загрузка...
+                </>
+              ) : (
+                isEdit ? 'Сохранить' : 'Добавить'
+              )}
             </button>
           </div>
         </form>
@@ -202,6 +239,7 @@ export default function UsersManagement() {
   const [showCredentials, setShowCredentials] = useState(false);
   const [newCredentials, setNewCredentials] = useState(null);
   const [error, setError] = useState('');
+  const [isOperationInProgress, setIsOperationInProgress] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -231,6 +269,7 @@ export default function UsersManagement() {
   };
 
   const handleSaveUser = async (userData) => {
+    setIsOperationInProgress(true);
     try {
       if (isEdit) {
         updateUser(editingUser.id, userData);
@@ -248,6 +287,9 @@ export default function UsersManagement() {
       loadUsers();
     } catch (error) {
       setError(error.message);
+      throw error; // Прокидываем ошибку чтобы модальное окно могло обработать состояние загрузки
+    } finally {
+      setIsOperationInProgress(false);
     }
   };
 
@@ -277,11 +319,11 @@ export default function UsersManagement() {
   }
 
   return (
-    <div className="flex">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar />
-      <div className="flex-1 ml-64 p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+      <div className="lg:ml-64 p-4 sm:p-8 pt-20 lg:pt-8">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">
             Пользователи и права
           </h1>
           <p className="text-gray-600">
@@ -303,12 +345,44 @@ export default function UsersManagement() {
               </h2>
               <button
                 onClick={handleAddUser}
-                className="bg-[#1B3B7B] text-white px-4 py-2 rounded-md hover:bg-[#152f61] flex items-center"
+                disabled={isOperationInProgress}
+                className={`px-4 py-2 text-white rounded-md flex items-center ${isOperationInProgress
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-[#1B3B7B] hover:bg-[#152f61]'
+                  }`}
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Добавить пользователя
+                {isOperationInProgress ? (
+                  <>
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Обработка...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Добавить пользователя
+                  </>
+                )}
               </button>
             </div>
           </div>

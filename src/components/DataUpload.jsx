@@ -23,7 +23,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="flex">
           <Sidebar />
-          <div className="flex-1 ml-64 p-8">
+          <div className="flex-1 lg:ml-64 p-4 sm:p-8 pt-20 lg:pt-8">
             <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded">
               <p className="font-medium">Произошла ошибка при загрузке страницы</p>
               <p className="text-sm mt-1">
@@ -84,7 +84,7 @@ function DataUploadComponent() {
     return (
       <div className="flex">
         <Sidebar />
-        <div className="flex-1 ml-64 p-8">
+        <div className="flex-1 lg:ml-64 p-4 sm:p-8 pt-20 lg:pt-8">
           <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded">
             <p className="font-medium">Доступ запрещен</p>
             <p className="text-sm mt-1">
@@ -177,14 +177,14 @@ function DataUploadComponent() {
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
 
-      <div className="ml-64 p-6">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900">Загрузка данных</h2>
+      <div className="lg:ml-64 p-4 sm:p-6 pt-20 lg:pt-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Загрузка данных</h2>
           <p className="text-sm text-gray-500 mt-1">Загрузите файлы Excel для обработки данных</p>
         </div>
 
         {/* Статистика */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 sm:mb-8">
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">

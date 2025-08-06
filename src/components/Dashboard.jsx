@@ -580,7 +580,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
 
       <div style={{ marginBottom: '32px' }}>
         <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Количество рейсов</h3>
-        <div style={{ height: '390px', width: '100%' }}>
+        <div style={{ height: '560px', width: '100%' }}>
           <ResponsiveContainer>
             <LineChart data={data.flights}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -596,7 +596,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '32px' }}>
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Разбивка по маршрутам (пассажиры)</h3>
-          <div style={{ height: '360px' }}>
+          <div style={{ height: '420px' }}>
             <ResponsiveContainer>
               <BarChart data={data.routePassengers} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
@@ -610,7 +610,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         </div>
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Разбивка по маршрутам (рейсы)</h3>
-          <div style={{ height: '360px' }}>
+          <div style={{ height: '420px' }}>
             <ResponsiveContainer>
               <BarChart data={data.routeFlights} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
@@ -628,7 +628,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '32px' }}>
           <div>
             <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Распределение по типу ВС</h3>
-            <div style={{ height: '300px' }}>
+            <div style={{ height: '390px' }}>
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
@@ -653,7 +653,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
           </div>
           <div>
             <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Распределение по типу ВС (пассажиры)</h3>
-            <div style={{ height: '300px' }}>
+            <div style={{ height: '390px' }}>
               <ResponsiveContainer>
                 <BarChart data={data.aircraftPassengerTypes}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -707,7 +707,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         {/* Время в пути */}
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Время в пути по маршрутам</h3>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '350px' }}>
             <ResponsiveContainer>
               <BarChart
                 data={data.flightTimeByRoute?.slice(0, 8) || []}
@@ -727,7 +727,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         {/* Топ аэропортов */}
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Топ аэропортов</h3>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '350px' }}>
             <ResponsiveContainer>
               <BarChart
                 data={data.topAirports?.slice(0, 8) || []}
@@ -750,7 +750,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         {/* Загруженность по типам ВС */}
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Загруженность по типам ВС</h3>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '400px' }}>
             <ResponsiveContainer>
               <BarChart data={data.loadFactorByAircraft || []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -766,7 +766,7 @@ const DashboardPDFContent = ({ data, startDate, endDate }) => {
         {/* Багаж по маршрутам */}
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Багаж по маршрутам</h3>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '400px' }}>
             <ResponsiveContainer>
               <BarChart
                 data={data.baggageByRoute?.slice(0, 8) || []}
@@ -1094,17 +1094,17 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
-      <div className="ml-64">
+      <div className="lg:ml-64">
         {/* Верхняя панель */}
-        <div className="bg-white border-b fixed top-0 right-0 left-64 z-20">
-          <div className="px-6 py-4">
-            <h1 className="text-2xl font-semibold text-gray-900">Добро пожаловать, Farrukh</h1>
+        <div className="bg-white border-b fixed top-0 right-0 left-0 lg:left-64 z-20">
+          <div className="px-4 sm:px-6 py-4 pt-16 lg:pt-4">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Добро пожаловать, Farrukh</h1>
             <p className="text-sm text-gray-500">Аналитика по рейсам Air Samarkand</p>
 
             {/* Фильтры по времени */}
-            <div className="mt-4 flex items-center space-x-4">
+            <div className="mt-4 space-y-4 lg:space-y-0 lg:flex lg:items-center lg:space-x-4">
               {/* Кнопки периодов */}
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   className={`px-4 py-2 text-sm rounded-md transition-colors ${activePeriod === '12 месяцев'
                     ? 'bg-[#1B3B7B] text-white'
@@ -1191,10 +1191,10 @@ export default function Dashboard() {
               </div>
 
               {/* Разделитель */}
-              <div className="h-6 border-l border-gray-300"></div>
+              <div className="hidden lg:block h-6 border-l border-gray-300"></div>
 
               {/* Дропдауны фильтров */}
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="relative">
                   <select
                     value={selectedAircraftType}
@@ -1246,7 +1246,7 @@ export default function Dashboard() {
               </div>
 
               {/* Правая часть с кнопкой PDF */}
-              <div className="flex-1 flex justify-end space-x-4">
+              <div className="flex justify-end space-x-4 w-full lg:w-auto lg:flex-1">
                 <button
                   className={`inline-flex items-center px-4 py-2 border border-[#1B3B7B] text-[#1B3B7B] rounded-lg hover:bg-[#1B3B7B] hover:text-white transition-colors ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
@@ -1311,7 +1311,7 @@ export default function Dashboard() {
         `}</style>
 
         {/* Основной контент */}
-        <div className="p-6 pt-44">
+        <div className="p-4 sm:p-6 pt-48 sm:pt-44 lg:pt-44">
           {/* Проверяем есть ли данные */}
           {flightData.length === 0 ? (
             <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -1334,7 +1334,7 @@ export default function Dashboard() {
 
 
               {/* Карточки со статистикой */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
                 <StatCard
                   title="Общее количество рейсов"
                   value={processedData.totalFlights.toLocaleString()}
@@ -1359,11 +1359,11 @@ export default function Dashboard() {
               </div>
 
               {/* График количества рейсов */}
-              <div className="bg-white p-6 rounded-lg shadow mb-6">
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold">Количество рейсов</h2>
                 </div>
-                <div style={{ width: '100%', height: 300 }}>
+                <div style={{ width: '100%', height: '250px' }} className="sm:h-[300px]">
                   <ResponsiveContainer>
                     <LineChart data={processedData.flights}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -1402,12 +1402,12 @@ export default function Dashboard() {
               {/* ======= ПЕРЕМЕЩЕННЫЕ ГРАФИКИ ======= */}
 
               {/* Первый ряд - 2 графика */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
                 {/* Эффективность по типам ВС */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Средняя загруженность по типам ВС (% PAX - столбчатый)</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Средняя загруженность по типам ВС (% PAX - столбчатый)</h2>
                   <p className="text-sm text-gray-500 mb-4">Среднее количество пассажиров на рейс по типам воздушных судов</p>
-                  <div style={{ width: '100%', height: 350 }}>
+                  <div style={{ width: '100%', height: '300px' }} className="sm:h-[350px]">
                     <ResponsiveContainer>
                       <BarChart data={processedData.aircraftEfficiency}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -1426,10 +1426,10 @@ export default function Dashboard() {
                 </div>
 
                 {/* Самые загруженные аэропорты */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Самые загруженные аэропорты</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Самые загруженные аэропорты</h2>
                   <p className="text-sm text-gray-500 mb-4">Количество рейсов по аэропортам (вылеты + прилеты)</p>
-                  <div style={{ width: '100%', height: 350 }}>
+                  <div style={{ width: '100%', height: '300px' }} className="sm:h-[350px]">
                     <ResponsiveContainer>
                       <BarChart
                         data={processedData.topAirports}
@@ -1448,12 +1448,12 @@ export default function Dashboard() {
               </div>
 
               {/* Второй ряд - 2 графика */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
                 {/* Загруженность по типам ВС */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Загруженность по типам ВС</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Загруженность по типам ВС</h2>
                   <p className="text-sm text-gray-500 mb-4">Средний процент загрузки по типам воздушных судов</p>
-                  <div style={{ width: '100%', height: 350 }}>
+                  <div style={{ width: '100%', height: '300px' }} className="sm:h-[350px]">
                     <ResponsiveContainer>
                       <BarChart data={processedData.loadFactorByAircraft}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -1467,10 +1467,10 @@ export default function Dashboard() {
                 </div>
 
                 {/* Багаж по маршрутам */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Багаж по маршрутам</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Багаж по маршрутам</h2>
                   <p className="text-sm text-gray-500 mb-4">Средний вес багажа в килограммах по маршрутам</p>
-                  <div style={{ width: '100%', height: 350 }}>
+                  <div style={{ width: '100%', height: '300px' }} className="sm:h-[350px]">
                     <ResponsiveContainer>
                       <BarChart
                         data={processedData.baggageByRoute}
@@ -1489,12 +1489,12 @@ export default function Dashboard() {
               </div>
 
               {/* Разбивка по маршрутам */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
                 {/* Пассажиры по маршрутам */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Разбивка по маршрутам (пассажиры)</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Разбивка по маршрутам (пассажиры)</h2>
                   <p className="text-sm text-gray-500 mb-4">Количество пассажиров по маршрутам</p>
-                  <div style={{ width: '100%', height: 400 }}>
+                  <div style={{ width: '100%', height: '350px' }} className="sm:h-[400px]">
                     <ResponsiveContainer>
                       <BarChart
                         data={processedData.routePassengers}
@@ -1512,10 +1512,10 @@ export default function Dashboard() {
                 </div>
 
                 {/* Рейсы по маршрутам */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Разбивка по маршрутам (рейсы)</h2>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Разбивка по маршрутам (рейсы)</h2>
                   <p className="text-sm text-gray-500 mb-4">Количество рейсов по маршрутам</p>
-                  <div style={{ width: '100%', height: 400 }}>
+                  <div style={{ width: '100%', height: '350px' }} className="sm:h-[400px]">
                     <ResponsiveContainer>
                       <BarChart
                         data={processedData.routeFlights}
@@ -1534,10 +1534,10 @@ export default function Dashboard() {
               </div>
 
               {/* Распределение по типу ВС */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Распределение по типу ВС (рейсы)</h2>
-                  <div style={{ width: '100%', height: 300 }}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Распределение по типу ВС (рейсы)</h2>
+                  <div style={{ width: '100%', height: '250px' }} className="sm:h-[300px]">
                     <ResponsiveContainer>
                       <PieChart>
                         <Pie
@@ -1561,9 +1561,9 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-lg font-semibold mb-4">Распределение по типу ВС (пассажиры)</h2>
-                  <div style={{ width: '100%', height: 300 }}>
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                  <h2 className="text-base sm:text-lg font-semibold mb-4">Распределение по типу ВС (пассажиры)</h2>
+                  <div style={{ width: '100%', height: '250px' }} className="sm:h-[300px]">
                     <ResponsiveContainer>
                       <BarChart data={processedData.aircraftPassengerTypes}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -1580,10 +1580,10 @@ export default function Dashboard() {
               {/* ======= НОВЫЕ ГРАФИКИ ======= */}
 
               {/* 2. Распределение рейсов по часам */}
-              <div className="bg-white p-6 rounded-lg shadow mb-6">
-                <h2 className="text-lg font-semibold mb-4">Распределение рейсов по часам</h2>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow mb-6">
+                <h2 className="text-base sm:text-lg font-semibold mb-4">Распределение рейсов по часам</h2>
                 <p className="text-sm text-gray-500 mb-4">Количество рейсов в зависимости от времени отправления</p>
-                <div style={{ width: '100%', height: 350 }}>
+                <div style={{ width: '100%', height: '300px' }} className="sm:h-[350px]">
                   <ResponsiveContainer>
                     <BarChart data={processedData.hourlyDistribution}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -1597,8 +1597,8 @@ export default function Dashboard() {
               </div>
 
               {/* 3. Тепловая карта день×час */}
-              <div className="bg-white p-6 rounded-lg shadow mb-6">
-                <h2 className="text-lg font-semibold mb-4">Паттерны рейсов: день недели × час</h2>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow mb-6">
+                <h2 className="text-base sm:text-lg font-semibold mb-4">Паттерны рейсов: день недели × час</h2>
                 <p className="text-sm text-gray-500 mb-4">Интенсивность рейсов по дням недели и времени суток</p>
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
@@ -1641,10 +1641,10 @@ export default function Dashboard() {
               </div>
 
               {/* 4. Время в пути по маршрутам */}
-              <div className="bg-white p-6 rounded-lg shadow mb-6">
-                <h2 className="text-lg font-semibold mb-4">Время в пути по маршрутам</h2>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow mb-6">
+                <h2 className="text-base sm:text-lg font-semibold mb-4">Время в пути по маршрутам</h2>
                 <p className="text-sm text-gray-500 mb-4">Среднее время полета для различных маршрутов</p>
-                <div style={{ width: '100%', height: 400 }}>
+                <div style={{ width: '100%', height: '350px' }} className="sm:h-[400px]">
                   <ResponsiveContainer>
                     <BarChart
                       data={processedData.flightTimeByRoute}
