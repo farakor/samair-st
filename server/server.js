@@ -111,6 +111,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Favicon и logo роуты (должны быть самыми первыми роутами)
+app.get('/favicon.ico', (req, res) => {
+  console.log('🎯 Favicon.ico запрос получен!');
+  res.sendFile(path.join(__dirname, '../public/favicon.ico'));
+});
+
+app.get('/logo.png', (req, res) => {
+  console.log('🎯 Logo.png запрос получен!');
+  res.sendFile(path.join(__dirname, '../public/logo.png'));
+});
+
 // Auth routes
 app.use('/api/auth', authRoutes);
 
