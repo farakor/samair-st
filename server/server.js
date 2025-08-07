@@ -14,6 +14,7 @@ const fileProcessor = require('./services/fileProcessor');
 const { initDatabase, testConnection, query } = require('./config/database');
 const databaseService = require('./services/databaseService');
 const AuthService = require('./services/authService');
+const userService = require('./services/userService');
 const authRoutes = require('./routes/auth');
 
 const app = express();
@@ -789,6 +790,9 @@ app.listen(PORT, async () => {
   if (dbConnected) {
     // Инициализируем базу данных
     await initDatabase();
+    
+    // Инициализируем пользователей после создания таблиц
+    await userService.initializeUsers();
   } else {
     console.warn('Сервер работает без подключения к PostgreSQL');
   }

@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: samair-postgres
+    environment:
+      POSTGRES_DB: samair_db
+      POSTGRES_USER: samair_user
+      POSTGRES_PASSWORD: samair_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U samair_user -d samair_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   samair-st:
     build: .
     ports:
@@ -11,10 +30,21 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=samair_db
+      - DB_USER=samair_user
+      - DB_PASSWORD=samair_password
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/email-status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s 
+      start_period: 40s
+
+volumes:
+  postgres_data: 

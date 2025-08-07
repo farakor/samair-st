@@ -44,6 +44,22 @@ const initDatabase = async () => {
     const connectionTest = await query('SELECT NOW()');
     console.log('✅ Подключение к PostgreSQL успешно:', connectionTest.rows[0]);
     
+    console.log('👥 Создание таблицы users...');
+    // Создаем таблицу для пользователей
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL CHECK (role IN ('superadmin', 'full_access', 'read_only')),
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP,
+        is_active BOOLEAN DEFAULT true
+      )
+    `);
+    console.log('✅ Таблица users создана/проверена');
+
     console.log('📋 Создание таблицы uploaded_files...');
     // Создаем таблицу для файлов
     await query(`
@@ -117,6 +133,9 @@ const initDatabase = async () => {
     console.log('📂 Создание индексов...');
     // Создаем индексы для оптимизации запросов
     await query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+      CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
       CREATE INDEX IF NOT EXISTS idx_flight_data_date ON flight_data(date);
       CREATE INDEX IF NOT EXISTS idx_flight_data_aircraft_type ON flight_data(aircraft_type);
       CREATE INDEX IF NOT EXISTS idx_flight_data_departure ON flight_data(departure);
@@ -131,23 +150,25 @@ const initDatabase = async () => {
     const tablesResult = await query(`
       SELECT table_name 
       FROM information_schema.tables 
-      WHERE table_schema = 'public' AND table_name IN ('uploaded_files', 'flight_data')
+      WHERE table_schema = 'public' AND table_name IN ('users', 'uploaded_files', 'flight_data')
     `);
     
     const existingTables = tablesResult.rows.map(row => row.table_name);
     console.log('📋 Существующие таблицы:', existingTables);
     
-    if (existingTables.includes('uploaded_files') && existingTables.includes('flight_data')) {
+    if (existingTables.includes('users') && existingTables.includes('uploaded_files') && existingTables.includes('flight_data')) {
       console.log('✅ Все необходимые таблицы присутствуют');
     } else {
       console.error('❌ Некоторые таблицы отсутствуют!');
     }
 
     // Проверяем количество записей в таблицах
+    const usersCount = await query('SELECT COUNT(*) as count FROM users');
     const filesCount = await query('SELECT COUNT(*) as count FROM uploaded_files');
     const flightsCount = await query('SELECT COUNT(*) as count FROM flight_data');
     
     console.log(`📊 Статистика базы данных:`);
+    console.log(`   - Пользователей в базе: ${usersCount.rows[0].count}`);
     console.log(`   - Файлов в базе: ${filesCount.rows[0].count}`);
     console.log(`   - Рейсов в базе: ${flightsCount.rows[0].count}`);
 

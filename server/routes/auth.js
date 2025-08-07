@@ -140,7 +140,7 @@ router.post('/login', loginValidation, handleValidationErrors, async (req, res) 
 /**
  * POST /auth/verify - Проверка токена
  */
-router.post('/verify', (req, res) => {
+router.post('/verify', async (req, res) => {
   try {
     const { token } = req.body;
 
@@ -152,7 +152,7 @@ router.post('/verify', (req, res) => {
     }
 
     const decoded = AuthService.verifyToken(token);
-    const user = userService.getUserById(decoded.userId);
+    const user = await userService.getUserById(decoded.userId);
 
     if (!user || !user.isActive) {
       return res.status(401).json({
@@ -187,9 +187,9 @@ router.post('/logout', AuthService.authenticateToken, (req, res) => {
 /**
  * GET /auth/profile - Получение профиля пользователя
  */
-router.get('/profile', AuthService.authenticateToken, (req, res) => {
+router.get('/profile', AuthService.authenticateToken, async (req, res) => {
   try {
-    const user = userService.getUserById(req.user.userId);
+    const user = await userService.getUserById(req.user.userId);
     
     if (!user) {
       return res.status(404).json({
@@ -243,9 +243,9 @@ router.post('/change-password',
 router.get('/users', 
   AuthService.authenticateToken, 
   AuthService.requireSuperAdmin, 
-  (req, res) => {
+  async (req, res) => {
     try {
-      const users = userService.getAllUsers(req.user.userId);
+      const users = await userService.getAllUsers(req.user.userId);
       res.json({
         success: true,
         users: users

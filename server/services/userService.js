@@ -1,13 +1,13 @@
 const AuthService = require('./authService');
+const { query } = require('../config/database');
 
 /**
  * Сервис для работы с пользователями с улучшенной безопасностью
  */
 class UserService {
   constructor() {
-    this.users = [];
     this.isInitialized = false;
-    this.initializeUsers();
+    // Не инициализируем сразу, дождемся создания таблиц
   }
 
   /**
@@ -15,35 +15,47 @@ class UserService {
    */
   async initializeUsers() {
     try {
-      // Хешируем пароль суперадминистратора
-      const hashedPassword = await AuthService.hashPassword('eNL+i6wQ$56Kj?W');
-      
-      const initialUsers = [
-        {
-          id: 1,
-          email: 'farrukh.oripov@gmail.com',
-          name: 'Орипов Фаррух',
-          role: 'superadmin',
-          password: hashedPassword,
-          createdAt: new Date().toISOString(),
-          lastLogin: null,
-          isActive: true
-        },
-        {
-          id: 2,
-          email: 'farrukhoripov@gmail.com',
-          name: 'Орипов Фаррух (альт)',
-          role: 'superadmin',
-          password: hashedPassword,
-          createdAt: new Date().toISOString(),
-          lastLogin: null,
-          isActive: true
-        }
-      ];
+      // Проверяем существование суперадминистраторов
+      const existingAdmins = await query(`
+        SELECT id FROM users WHERE role = 'superadmin'
+      `);
 
-      this.users = initialUsers;
+      if (existingAdmins.rows.length === 0) {
+        console.log('👥 Создание начальных суперадминистраторов...');
+        
+        // Хешируем пароль суперадминистратора
+        const hashedPassword = await AuthService.hashPassword('eNL+i6wQ$56Kj?W');
+        
+        const initialUsers = [
+          {
+            email: 'farrukh.oripov@gmail.com',
+            name: 'Орипов Фаррух',
+            role: 'superadmin',
+            password: hashedPassword
+          },
+          {
+            email: 'farrukhoripov@gmail.com',
+            name: 'Орипов Фаррух (альт)',
+            role: 'superadmin',
+            password: hashedPassword
+          }
+        ];
+
+        for (const user of initialUsers) {
+          await query(`
+            INSERT INTO users (email, name, role, password, created_at, is_active)
+            VALUES ($1, $2, $3, $4, NOW(), true)
+            ON CONFLICT (email) DO NOTHING
+          `, [user.email, user.name, user.role, user.password]);
+        }
+        
+        console.log('✅ Начальные суперадминистраторы созданы');
+      } else {
+        console.log(`✅ Найдено ${existingAdmins.rows.length} суперадминистраторов в базе данных`);
+      }
+
       this.isInitialized = true;
-      console.log('✅ Пользователи инициализированы с хешированными паролями');
+      console.log('✅ Пользователи инициализированы с базой данных PostgreSQL');
     } catch (error) {
       console.error('❌ Ошибка инициализации пользователей:', error);
       throw error;
@@ -60,14 +72,20 @@ class UserService {
       }
 
       console.log(`🔍 Попытка аутентификации пользователя: ${email}`);
-      console.log(`📊 Всего пользователей в системе: ${this.users.length}`);
-      console.log(`👥 Пользователи:`, this.users.map(u => ({ email: u.email, active: u.isActive })));
-
-      const user = this.users.find(u => u.email === email && u.isActive);
       
-      if (!user) {
+      // Ищем пользователя в базе данных
+      const userResult = await query(`
+        SELECT id, email, name, role, password, last_login, is_active 
+        FROM users 
+        WHERE email = $1 AND is_active = true
+      `, [email]);
+
+      if (userResult.rows.length === 0) {
         throw new Error('Пользователь не найден');
       }
+
+      const user = userResult.rows[0];
+      console.log(`👥 Найден пользователь: ${user.email} (${user.role})`);
 
       const isPasswordValid = await AuthService.verifyPassword(password, user.password);
       
@@ -76,7 +94,11 @@ class UserService {
       }
 
       // Обновляем время последнего входа
-      user.lastLogin = new Date().toISOString();
+      await query(`
+        UPDATE users 
+        SET last_login = NOW() 
+        WHERE id = $1
+      `, [user.id]);
 
       // Генерируем JWT токен
       const token = AuthService.generateToken(user.id, user.email, user.role);
@@ -89,7 +111,7 @@ class UserService {
           email: user.email,
           name: user.name,
           role: user.role,
-          lastLogin: user.lastLogin
+          lastLogin: new Date().toISOString()
         }
       };
     } catch (error) {
@@ -106,13 +128,21 @@ class UserService {
    */
   async createUser(userData, creatorId) {
     try {
-      const creator = this.users.find(u => u.id === creatorId);
-      if (!creator || creator.role !== 'superadmin') {
+      // Проверяем права создателя
+      const creatorResult = await query(`
+        SELECT id, role FROM users WHERE id = $1 AND is_active = true
+      `, [creatorId]);
+
+      if (creatorResult.rows.length === 0 || creatorResult.rows[0].role !== 'superadmin') {
         throw new Error('Только суперадмин может создавать пользователей');
       }
 
       // Проверяем, что пользователь с таким email не существует
-      if (this.users.find(u => u.email === userData.email)) {
+      const existingUserResult = await query(`
+        SELECT id FROM users WHERE email = $1
+      `, [userData.email.toLowerCase().trim()]);
+
+      if (existingUserResult.rows.length > 0) {
         throw new Error('Пользователь с таким email уже существует');
       }
 
@@ -126,18 +156,19 @@ class UserService {
       const password = AuthService.generateSecurePassword(16);
       const hashedPassword = await AuthService.hashPassword(password);
 
-      const newUser = {
-        id: Date.now(),
-        email: userData.email.toLowerCase().trim(),
-        name: userData.name.trim(),
-        role: userData.role,
-        password: hashedPassword,
-        createdAt: new Date().toISOString(),
-        lastLogin: null,
-        isActive: true
-      };
+      // Создаем пользователя в базе данных
+      const insertResult = await query(`
+        INSERT INTO users (email, name, role, password, created_at, is_active)
+        VALUES ($1, $2, $3, $4, NOW(), true)
+        RETURNING id, email, name, role, created_at
+      `, [
+        userData.email.toLowerCase().trim(),
+        userData.name.trim(),
+        userData.role,
+        hashedPassword
+      ]);
 
-      this.users.push(newUser);
+      const newUser = insertResult.rows[0];
 
       return {
         success: true,
@@ -146,7 +177,7 @@ class UserService {
           email: newUser.email,
           name: newUser.name,
           role: newUser.role,
-          createdAt: newUser.createdAt
+          createdAt: newUser.created_at
         },
         generatedPassword: password
       };
@@ -161,53 +192,79 @@ class UserService {
    */
   async updateUser(userId, updateData, updaterId) {
     try {
-      const updater = this.users.find(u => u.id === updaterId);
-      if (!updater || updater.role !== 'superadmin') {
+      // Проверяем права обновителя
+      const updaterResult = await query(`
+        SELECT id, role FROM users WHERE id = $1 AND is_active = true
+      `, [updaterId]);
+
+      if (updaterResult.rows.length === 0 || updaterResult.rows[0].role !== 'superadmin') {
         throw new Error('Только суперадмин может обновлять пользователей');
       }
 
-      const userIndex = this.users.findIndex(u => u.id === userId);
-      if (userIndex === -1) {
+      // Проверяем существование обновляемого пользователя
+      const userResult = await query(`
+        SELECT id, email, name, role, is_active FROM users WHERE id = $1
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
         throw new Error('Пользователь не найден');
       }
 
-      const user = this.users[userIndex];
+      const user = userResult.rows[0];
 
       // Защита от изменения суперадмина
       if (user.role === 'superadmin' && userId !== updaterId) {
         throw new Error('Нельзя изменять данные другого суперадмина');
       }
 
-      // Обновляем только разрешенные поля
-      const allowedFields = ['name', 'email', 'role', 'isActive'];
-      const updates = {};
+      // Подготавливаем обновления
+      const allowedFields = ['name', 'email', 'role', 'is_active'];
+      const updates = [];
+      const values = [];
+      let valueIndex = 1;
 
       for (const field of allowedFields) {
-        if (updateData[field] !== undefined) {
+        const updateField = field === 'is_active' ? 'isActive' : field;
+        if (updateData[updateField] !== undefined) {
           if (field === 'email') {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(updateData[field])) {
+            if (!emailRegex.test(updateData[updateField])) {
               throw new Error('Неверный формат email');
             }
-            updates[field] = updateData[field].toLowerCase().trim();
+            updates.push(`${field} = $${valueIndex}`);
+            values.push(updateData[updateField].toLowerCase().trim());
           } else if (field === 'name') {
-            updates[field] = updateData[field].trim();
+            updates.push(`${field} = $${valueIndex}`);
+            values.push(updateData[updateField].trim());
           } else {
-            updates[field] = updateData[field];
+            updates.push(`${field} = $${valueIndex}`);
+            values.push(updateData[updateField]);
           }
+          valueIndex++;
         }
       }
 
-      this.users[userIndex] = { ...user, ...updates };
+      if (updates.length === 0) {
+        throw new Error('Нет данных для обновления');
+      }
+
+      // Выполняем обновление
+      values.push(userId);
+      const updateResult = await query(`
+        UPDATE users 
+        SET ${updates.join(', ')}
+        WHERE id = $${valueIndex}
+        RETURNING id, email, name, role, is_active
+      `, values);
 
       return {
         success: true,
         user: {
-          id: this.users[userIndex].id,
-          email: this.users[userIndex].email,
-          name: this.users[userIndex].name,
-          role: this.users[userIndex].role,
-          isActive: this.users[userIndex].isActive
+          id: updateResult.rows[0].id,
+          email: updateResult.rows[0].email,
+          name: updateResult.rows[0].name,
+          role: updateResult.rows[0].role,
+          isActive: updateResult.rows[0].is_active
         }
       };
     } catch (error) {
@@ -221,21 +278,34 @@ class UserService {
    */
   async deleteUser(userId, deleterId) {
     try {
-      const deleter = this.users.find(u => u.id === deleterId);
-      if (!deleter || deleter.role !== 'superadmin') {
+      // Проверяем права удаляющего
+      const deleterResult = await query(`
+        SELECT id, role FROM users WHERE id = $1 AND is_active = true
+      `, [deleterId]);
+
+      if (deleterResult.rows.length === 0 || deleterResult.rows[0].role !== 'superadmin') {
         throw new Error('Только суперадмин может удалять пользователей');
       }
 
-      const userToDelete = this.users.find(u => u.id === userId);
-      if (!userToDelete) {
+      // Проверяем существование удаляемого пользователя
+      const userResult = await query(`
+        SELECT id, role FROM users WHERE id = $1
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
         throw new Error('Пользователь не найден');
       }
+
+      const userToDelete = userResult.rows[0];
 
       if (userToDelete.role === 'superadmin') {
         throw new Error('Нельзя удалить суперадмина');
       }
 
-      this.users = this.users.filter(u => u.id !== userId);
+      // Удаляем пользователя из базы данных
+      await query(`
+        DELETE FROM users WHERE id = $1
+      `, [userId]);
 
       return {
         success: true,
@@ -250,21 +320,32 @@ class UserService {
   /**
    * Получение всех пользователей
    */
-  getAllUsers(requesterId) {
+  async getAllUsers(requesterId) {
     try {
-      const requester = this.users.find(u => u.id === requesterId);
-      if (!requester || requester.role !== 'superadmin') {
+      // Проверяем права запрашивающего
+      const requesterResult = await query(`
+        SELECT id, role FROM users WHERE id = $1 AND is_active = true
+      `, [requesterId]);
+
+      if (requesterResult.rows.length === 0 || requesterResult.rows[0].role !== 'superadmin') {
         throw new Error('Только суперадмин может просматривать список пользователей');
       }
 
-      return this.users.map(user => ({
+      // Получаем всех пользователей
+      const usersResult = await query(`
+        SELECT id, email, name, role, created_at, last_login, is_active
+        FROM users
+        ORDER BY created_at DESC
+      `);
+
+      return usersResult.rows.map(user => ({
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin,
-        isActive: user.isActive
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
+        isActive: user.is_active
       }));
     } catch (error) {
       console.error('Ошибка получения пользователей:', error);
@@ -277,10 +358,16 @@ class UserService {
    */
   async changePassword(userId, currentPassword, newPassword) {
     try {
-      const user = this.users.find(u => u.id === userId);
-      if (!user) {
+      // Получаем пользователя
+      const userResult = await query(`
+        SELECT id, password FROM users WHERE id = $1 AND is_active = true
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
         throw new Error('Пользователь не найден');
       }
+
+      const user = userResult.rows[0];
 
       // Проверяем текущий пароль
       const isCurrentPasswordValid = await AuthService.verifyPassword(currentPassword, user.password);
@@ -296,7 +383,11 @@ class UserService {
 
       // Хешируем новый пароль
       const hashedNewPassword = await AuthService.hashPassword(newPassword);
-      user.password = hashedNewPassword;
+
+      // Обновляем пароль в базе данных
+      await query(`
+        UPDATE users SET password = $1 WHERE id = $2
+      `, [hashedNewPassword, userId]);
 
       return {
         success: true,
@@ -313,15 +404,26 @@ class UserService {
    */
   async resetPassword(userId, reseterId) {
     try {
-      const reseter = this.users.find(u => u.id === reseterId);
-      if (!reseter || (reseter.role !== 'superadmin' && reseter.role !== 'full_access')) {
+      // Проверяем права сбрасывающего
+      const reseterResult = await query(`
+        SELECT id, role FROM users WHERE id = $1 AND is_active = true
+      `, [reseterId]);
+
+      if (reseterResult.rows.length === 0 || 
+          (reseterResult.rows[0].role !== 'superadmin' && reseterResult.rows[0].role !== 'full_access')) {
         throw new Error('Только суперадмин и пользователи с полным доступом могут сбрасывать пароли');
       }
 
-      const userToReset = this.users.find(u => u.id === userId);
-      if (!userToReset) {
+      // Получаем пользователя для сброса
+      const userResult = await query(`
+        SELECT id, email, name, role FROM users WHERE id = $1
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
         throw new Error('Пользователь не найден');
       }
+
+      const userToReset = userResult.rows[0];
 
       // Защита от сброса пароля суперадмина
       if (userToReset.role === 'superadmin' && userId !== reseterId) {
@@ -332,9 +434,10 @@ class UserService {
       const newPassword = AuthService.generateSecurePassword(16);
       const hashedPassword = await AuthService.hashPassword(newPassword);
 
-      // Обновляем пароль пользователя
-      const userIndex = this.users.findIndex(u => u.id === userId);
-      this.users[userIndex].password = hashedPassword;
+      // Обновляем пароль пользователя в базе данных
+      await query(`
+        UPDATE users SET password = $1 WHERE id = $2
+      `, [hashedPassword, userId]);
 
       return {
         success: true,
@@ -355,21 +458,32 @@ class UserService {
   /**
    * Получение пользователя по ID
    */
-  getUserById(userId) {
-    const user = this.users.find(u => u.id === userId);
-    if (!user) {
+  async getUserById(userId) {
+    try {
+      const userResult = await query(`
+        SELECT id, email, name, role, created_at, last_login, is_active
+        FROM users 
+        WHERE id = $1
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
+        return null;
+      }
+
+      const user = userResult.rows[0];
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
+        isActive: user.is_active
+      };
+    } catch (error) {
+      console.error('Ошибка получения пользователя по ID:', error);
       return null;
     }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      createdAt: user.createdAt,
-      lastLogin: user.lastLogin,
-      isActive: user.isActive
-    };
   }
 
   /**
