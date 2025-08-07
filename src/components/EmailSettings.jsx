@@ -27,41 +27,35 @@ export default function EmailSettings() {
   const [messageType, setMessageType] = useState('');
   const [smtpMessage, setSmtpMessage] = useState('');
   const [smtpMessageType, setSmtpMessageType] = useState('');
-  const { canAccessUpload } = useAuth();
+  const { canAccessUpload, apiUtils } = useAuth();
 
   const loadConfig = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/email-config');
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Object.keys(data).length > 0) {
-          setConfig(prevConfig => ({
-            ...prevConfig,
-            ...data
-          }));
-        }
+      const data = await apiUtils.get('/email-config');
+      if (data && Object.keys(data).length > 0) {
+        setConfig(prevConfig => ({
+          ...prevConfig,
+          ...data
+        }));
       }
     } catch (error) {
       console.error('Ошибка при загрузке конфигурации:', error);
     }
-  }, []);
+  }, [apiUtils]);
 
   const loadSMTPConfig = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/smtp-config');
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Object.keys(data).length > 0) {
-          setSmtpConfig(prevConfig => ({
-            ...prevConfig,
-            ...data
-          }));
-        }
+      const data = await apiUtils.get('/smtp-config');
+      if (data && Object.keys(data).length > 0) {
+        setSmtpConfig(prevConfig => ({
+          ...prevConfig,
+          ...data
+        }));
       }
     } catch (error) {
       console.error('Ошибка при загрузке SMTP конфигурации:', error);
     }
-  }, []);
+  }, [apiUtils]);
 
   // Загружаем текущую конфигурацию при монтировании
   useEffect(() => {
@@ -116,17 +110,9 @@ export default function EmailSettings() {
     setMessage('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/test-email-connection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config),
-      });
+      const result = await apiUtils.post('/test-email-connection', config);
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result.success) {
         setMessage('Подключение к почте прошло успешно!');
         setMessageType('success');
       } else {
@@ -152,17 +138,9 @@ export default function EmailSettings() {
     setMessage('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/email-config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config),
-      });
+      const result = await apiUtils.post('/email-config', config);
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result.success) {
         setMessage('Настройки почты сохранены успешно!');
         setMessageType('success');
       } else {
@@ -188,17 +166,9 @@ export default function EmailSettings() {
     setSmtpMessage('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/test-smtp-connection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(smtpConfig),
-      });
+      const result = await apiUtils.post('/test-smtp-connection', smtpConfig);
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result.success) {
         setSmtpMessage('SMTP подключение прошло успешно!');
         setSmtpMessageType('success');
       } else {
@@ -224,17 +194,9 @@ export default function EmailSettings() {
     setSmtpMessage('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/smtp-config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(smtpConfig),
-      });
+      const result = await apiUtils.post('/smtp-config', smtpConfig);
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result.success) {
         setSmtpMessage('SMTP настройки сохранены успешно!');
         setSmtpMessageType('success');
       } else {

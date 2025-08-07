@@ -73,7 +73,7 @@ export default function Login() {
   }, [isAuthenticated, navigate]);
 
   // Показываем загрузку до завершения инициализации
-  if (!isInitialized) {
+  if (!isInitialized || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -93,15 +93,15 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const success = login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.success) {
         navigate('/');
       } else {
-        setError('Неверный email или пароль');
+        setError(result.error || 'Неверный email или пароль');
       }
     } catch (error) {
       console.error('Ошибка входа:', error);
-      setError('Произошла ошибка при входе');
+      setError('Произошла ошибка при входе в систему');
     } finally {
       setLoading(false);
     }
@@ -171,13 +171,6 @@ export default function Login() {
                 {loading ? 'Вход...' : 'Войти'}
               </button>
             </form>
-
-            {/* Для демо - показываем учетные данные */}
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-sm text-blue-800 font-medium mb-2">Демо учетные данные:</p>
-              <p className="text-xs text-blue-700">Email: farrukh.oripov@gmail.com</p>
-              <p className="text-xs text-blue-700">Пароль: admin123</p>
-            </div>
           </div>
         </div>
 

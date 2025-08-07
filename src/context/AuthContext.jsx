@@ -2,88 +2,160 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
-// Изначальные пользователи системы
-const INITIAL_USERS = [
-  {
-    id: 1,
-    email: 'farrukh.oripov@gmail.com',
-    name: 'Орипов Фаррух',
-    role: 'superadmin',
-    password: 'admin123' // В реальной системе пароли должны быть хешированы
-  }
-];
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// Функция генерации случайного пароля
-const generatePassword = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+// Утилиты для работы с токенами
+const tokenUtils = {
+  getToken: () => localStorage.getItem('authToken'),
+  setToken: (token) => localStorage.setItem('authToken', token),
+  removeToken: () => localStorage.removeItem('authToken'),
+
+  // Получение заголовков авторизации
+  getAuthHeaders: () => {
+    const token = tokenUtils.getToken();
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
-  return password;
+};
+
+// Утилиты для API запросов
+const apiUtils = {
+  async request(url, options = {}) {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...tokenUtils.getAuthHeaders(),
+        ...options.headers,
+      },
+      ...options,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Неизвестная ошибка' }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async get(url, options = {}) {
+    return this.request(url, { method: 'GET', ...options });
+  },
+
+  async post(url, data, options = {}) {
+    return this.request(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      ...options,
+    });
+  },
+
+  async put(url, data, options = {}) {
+    return this.request(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      ...options,
+    });
+  },
+
+  async delete(url, options = {}) {
+    return this.request(url, { method: 'DELETE', ...options });
+  }
 };
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Инициализация пользователей и сессии
+  // Инициализация и проверка токена
   useEffect(() => {
-    console.log('🔄 Инициализация AuthContext...');
+    const initializeAuth = async () => {
+      console.log('🔄 Инициализация AuthContext...');
+      setLoading(true);
 
-    // Загружаем пользователей из localStorage
-    const savedUsers = localStorage.getItem('systemUsers');
-    const loadedUsers = savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS;
-    setUsers(loadedUsers);
-
-    // Восстанавливаем текущего пользователя
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        // Проверяем, существует ли такой пользователь в системе
-        const existingUser = loadedUsers.find(u => u.id === user.id && u.email === user.email);
-        if (existingUser) {
-          console.log('✅ Восстанавливаем пользователя из localStorage:', user.email);
-          setCurrentUser(user);
-        } else {
-          console.log('⚠️ Пользователь из localStorage не найден в системе, очищаем сессию');
-          localStorage.removeItem('currentUser');
+      const token = tokenUtils.getToken();
+      if (token) {
+        try {
+          // Проверяем токен на сервере
+          const response = await apiUtils.post('/auth/verify', { token });
+          if (response.success) {
+            console.log('✅ Токен действителен, восстанавливаем пользователя:', response.user.email);
+            setCurrentUser(response.user);
+          } else {
+            console.log('⚠️ Недействительный токен, очищаем сессию');
+            tokenUtils.removeToken();
+          }
+        } catch (error) {
+          console.error('❌ Ошибка при проверке токена:', error);
+          tokenUtils.removeToken();
         }
-      } catch (error) {
-        console.error('❌ Ошибка при восстановлении пользователя из localStorage:', error);
-        localStorage.removeItem('currentUser');
       }
-    }
 
-    setIsInitialized(true);
-    console.log('✅ AuthContext инициализирован');
+      setIsInitialized(true);
+      setLoading(false);
+      console.log('✅ AuthContext инициализирован');
+    };
+
+    initializeAuth();
   }, []);
 
-  // Сохраняем пользователей в localStorage при изменении (только после инициализации)
+  // Автоматическое обновление списка пользователей для суперадмина
   useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem('systemUsers', JSON.stringify(users));
-      console.log('💾 Пользователи сохранены в localStorage');
-    }
-  }, [users, isInitialized]);
+    const loadUsers = async () => {
+      if (currentUser?.role === 'superadmin') {
+        try {
+          const response = await apiUtils.get('/auth/users');
+          if (response.success) {
+            setUsers(response.users);
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки пользователей:', error);
+        }
+      }
+    };
 
-  const login = (email, password) => {
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      const userWithoutPassword = { ...user };
-      delete userWithoutPassword.password;
-      setCurrentUser(userWithoutPassword);
-      localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
-      return true;
+    if (isInitialized && currentUser) {
+      loadUsers();
     }
-    return false;
+  }, [currentUser, isInitialized]);
+
+  const login = async (email, password) => {
+    try {
+      console.log('🔑 Отправляем данные для входа:', { email, password: '***' });
+      const response = await apiUtils.post('/auth/login', { email, password });
+
+      if (response.success) {
+        tokenUtils.setToken(response.token);
+        setCurrentUser(response.user);
+        console.log('✅ Успешный вход через API:', response.user.email);
+        return { success: true };
+      } else {
+        return { success: false, error: response.error };
+      }
+    } catch (error) {
+      console.error('Ошибка входа:', error);
+      // Если API недоступно, показываем ошибку подключения
+      if (error.message === 'Failed to fetch') {
+        return { success: false, error: 'Сервер недоступен. Проверьте подключение к интернету.' };
+      }
+      return { success: false, error: error.message };
+    }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('currentUser');
+  const logout = async () => {
+    try {
+      // Уведомляем сервер о выходе (если доступен)
+      await apiUtils.post('/auth/logout');
+    } catch (error) {
+      console.warn('Не удалось уведомить сервер о выходе:', error.message);
+    } finally {
+      // Очищаем только токен
+      tokenUtils.removeToken();
+      setCurrentUser(null);
+      setUsers([]);
+      console.log('✅ Выход из системы');
+    }
   };
 
   const isSuperAdmin = () => {
@@ -99,91 +171,99 @@ export const AuthProvider = ({ children }) => {
   };
 
   const addUser = async (userData) => {
-    if (!isSuperAdmin()) {
-      throw new Error('Только суперадмин может добавлять пользователей');
-    }
-
-    // Проверяем, что пользователь с таким email не существует
-    if (users.find(u => u.email === userData.email)) {
-      throw new Error('Пользователь с таким email уже существует');
-    }
-
-    const password = generatePassword();
-    const newUser = {
-      id: Date.now(),
-      email: userData.email,
-      name: userData.name,
-      role: userData.role,
-      password: password
-    };
-
-    setUsers(prev => [...prev, newUser]);
-
-    // Отправляем приветственное письмо
     try {
-      const response = await fetch('http://localhost:3001/api/send-welcome-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userEmail: newUser.email,
-          userName: newUser.name,
-          password: password
-        })
-      });
+      const response = await apiUtils.post('/auth/users', userData);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Ошибка отправки приветственного письма:', errorData.error);
-        // Не прерываем создание пользователя, просто логируем ошибку
+      if (response.success) {
+        // Обновляем список пользователей
+        setUsers(prev => [...prev, response.user]);
+        return {
+          success: true,
+          user: response.user,
+          generatedPassword: response.generatedPassword
+        };
       } else {
-        const result = await response.json();
-        console.log('Приветственное письмо отправлено:', result.message);
+        throw new Error(response.error);
       }
     } catch (error) {
-      console.error('Ошибка при отправке приветственного письма:', error);
-      // Не прерываем создание пользователя, просто логируем ошибку
+      console.error('Ошибка создания пользователя:', error);
+      throw error;
     }
-
-    // Возвращаем пароль для отображения 
-    return { ...newUser, generatedPassword: password };
   };
 
-  const updateUser = (userId, userData) => {
-    if (!isSuperAdmin()) {
-      throw new Error('Только суперадмин может изменять пользователей');
-    }
+  const updateUser = async (userId, userData) => {
+    try {
+      const response = await apiUtils.put(`/auth/users/${userId}`, userData);
 
-    setUsers(prev => prev.map(user =>
-      user.id === userId
-        ? { ...user, ...userData }
-        : user
-    ));
+      if (response.success) {
+        // Обновляем список пользователей
+        setUsers(prev => prev.map(user =>
+          user.id === userId ? response.user : user
+        ));
+        return { success: true, user: response.user };
+      } else {
+        throw new Error(response.error);
+      }
+    } catch (error) {
+      console.error('Ошибка обновления пользователя:', error);
+      throw error;
+    }
   };
 
-  const deleteUser = (userId) => {
-    if (!isSuperAdmin()) {
-      throw new Error('Только суперадмин может удалять пользователей');
-    }
+  const deleteUser = async (userId) => {
+    try {
+      const response = await apiUtils.delete(`/auth/users/${userId}`);
 
-    const userToDelete = users.find(u => u.id === userId);
-    if (userToDelete?.role === 'superadmin') {
-      throw new Error('Нельзя удалить суперадмина');
+      if (response.success) {
+        // Удаляем пользователя из списка
+        setUsers(prev => prev.filter(user => user.id !== userId));
+        return { success: true };
+      } else {
+        throw new Error(response.error);
+      }
+    } catch (error) {
+      console.error('Ошибка удаления пользователя:', error);
+      throw error;
     }
-
-    setUsers(prev => prev.filter(user => user.id !== userId));
   };
 
   const getAllUsers = () => {
-    if (!isSuperAdmin()) {
-      throw new Error('Только суперадмин может просматривать список пользователей');
-    }
+    return users;
+  };
 
-    return users.map(user => {
-      const { password, ...userWithoutPassword } = user;
-      return userWithoutPassword;
-    });
+  // Смена пароля
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      const response = await apiUtils.post('/auth/change-password', {
+        currentPassword,
+        newPassword
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Ошибка смены пароля:', error);
+      throw error;
+    }
+  };
+
+  // Сброс пароля пользователя
+  const resetUserPassword = async (userId) => {
+    try {
+      const response = await apiUtils.post(`/auth/users/${userId}/reset-password`);
+
+      if (response.success) {
+        return {
+          success: true,
+          message: response.message,
+          user: response.user
+        };
+      } else {
+        throw new Error(response.error);
+      }
+    } catch (error) {
+      console.error('Ошибка сброса пароля:', error);
+      throw error;
+    }
   };
 
   return (
@@ -191,6 +271,7 @@ export const AuthProvider = ({ children }) => {
       currentUser,
       isAuthenticated: !!currentUser,
       isInitialized,
+      loading,
       login,
       logout,
       isSuperAdmin,
@@ -199,7 +280,13 @@ export const AuthProvider = ({ children }) => {
       addUser,
       updateUser,
       deleteUser,
-      getAllUsers
+      getAllUsers,
+      changePassword,
+      resetUserPassword,
+      users,
+      // Утилиты для API запросов
+      apiUtils,
+      tokenUtils
     }}>
       {children}
     </AuthContext.Provider>

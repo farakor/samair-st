@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useFiles } from '../context/FilesContext';
 import Sidebar from './Sidebar';
 
 const ROLE_LABELS = {
@@ -231,7 +232,8 @@ const CredentialsModal = ({ isOpen, onClose, credentials }) => {
 };
 
 export default function UsersManagement() {
-  const { getAllUsers, addUser, updateUser, deleteUser, isSuperAdmin, currentUser } = useAuth();
+  const { getAllUsers, addUser, updateUser, deleteUser, resetUserPassword, isSuperAdmin, hasFullAccess, users: contextUsers, apiUtils } = useAuth();
+  const { clearAllFiles } = useFiles();
   const [users, setUsers] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -241,18 +243,25 @@ export default function UsersManagement() {
   const [error, setError] = useState('');
   const [isOperationInProgress, setIsOperationInProgress] = useState(false);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
-  const loadUsers = () => {
+  const loadUsers = useCallback(() => {
     try {
       const usersList = getAllUsers();
       setUsers(usersList);
     } catch (error) {
       setError(error.message);
     }
-  };
+  }, [getAllUsers]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  // Синхронизируем локальное состояние с контекстом
+  useEffect(() => {
+    if (contextUsers && contextUsers.length > 0) {
+      setUsers(contextUsers);
+    }
+  }, [contextUsers]);
 
   const handleAddUser = () => {
     setEditingUser(null);
@@ -277,7 +286,7 @@ export default function UsersManagement() {
       } else {
         const result = await addUser(userData);
         setNewCredentials({
-          email: result.email,
+          email: result.user.email,
           password: result.generatedPassword
         });
         setShowCredentials(true);
@@ -302,6 +311,97 @@ export default function UsersManagement() {
       } catch (error) {
         setError(error.message);
       }
+    }
+  };
+
+  const handleResetPassword = async (userId, userName, userRole) => {
+    // Проверяем права доступа
+    if (!hasFullAccess()) {
+      setError('У вас нет прав для сброса паролей');
+      return;
+    }
+
+    // Защита от сброса пароля суперадмина
+    if (userRole === 'superadmin') {
+      setError('Нельзя сбросить пароль суперадмина');
+      return;
+    }
+
+    if (window.confirm(`Вы уверены, что хотите сбросить пароль пользователя "${userName}"?\n\nНовый пароль будет отправлен на email пользователя.`)) {
+      setIsOperationInProgress(true);
+      try {
+        const result = await resetUserPassword(userId);
+        setError('');
+        alert(`Пароль пользователя "${userName}" успешно сброшен.\nНовый пароль отправлен на email: ${result.user.email}`);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setIsOperationInProgress(false);
+      }
+    }
+  };
+
+  const handleClearUserData = async () => {
+    // Проверяем права доступа
+    if (!hasFullAccess()) {
+      setError('У вас нет прав для выполнения этой операции');
+      return;
+    }
+
+    const confirmMessage = `🚨 ВНИМАНИЕ! 
+
+Эта операция полностью удалит ВСЕ пользовательские данные:
+• Все рейсы из базы данных
+• Все загруженные файлы
+• Все email логи
+
+ЭТО ДЕЙСТВИЕ НЕОБРАТИМО!
+
+Введите "УДАЛИТЬ" для подтверждения:`;
+
+    const confirmation = window.prompt(confirmMessage);
+
+    if (confirmation !== 'УДАЛИТЬ') {
+      return;
+    }
+
+    setIsOperationInProgress(true);
+    try {
+      const response = await apiUtils.post('/clear-user-data', {});
+
+      if (response.success) {
+        const stats = response.data;
+
+        // Также очищаем клиентские данные (IndexedDB, localStorage)
+        try {
+          await clearAllFiles();
+          console.log('✅ Клиентские данные также очищены');
+        } catch (clientError) {
+          console.error('⚠️ Ошибка очистки клиентских данных:', clientError);
+        }
+
+        alert(`✅ Очистка данных завершена успешно!
+
+Серверные данные:
+• Рейсов: ${stats.clearedFlights}
+• Записей о файлах: ${stats.clearedFileRecords}
+• Физических файлов: ${stats.deletedFiles}
+• Email логи: очищены
+
+Клиентские данные:
+• IndexedDB: очищен
+• localStorage: очищен
+
+Система готова к загрузке новых данных.`);
+        setError('');
+      } else {
+        throw new Error(response.error || 'Неизвестная ошибка');
+      }
+    } catch (error) {
+      console.error('Ошибка очистки данных:', error);
+      setError(`Ошибка очистки данных: ${error.message}`);
+    } finally {
+      setIsOperationInProgress(false);
     }
   };
 
@@ -443,17 +543,26 @@ export default function UsersManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      {user.role !== 'superadmin' && (
+                      {user.role !== 'superadmin' && hasFullAccess() && (
                         <>
                           <button
                             onClick={() => handleEditUser(user)}
                             className="text-indigo-600 hover:text-indigo-900"
+                            disabled={isOperationInProgress}
                           >
                             Редактировать
                           </button>
                           <button
+                            onClick={() => handleResetPassword(user.id, user.name, user.role)}
+                            className="text-yellow-600 hover:text-yellow-900"
+                            disabled={isOperationInProgress}
+                          >
+                            Сбросить пароль
+                          </button>
+                          <button
                             onClick={() => handleDeleteUser(user.id, user.name)}
                             className="text-red-600 hover:text-red-900"
+                            disabled={isOperationInProgress}
                           >
                             Удалить
                           </button>
@@ -462,6 +571,9 @@ export default function UsersManagement() {
                       {user.role === 'superadmin' && (
                         <span className="text-gray-400">Защищен</span>
                       )}
+                      {user.role !== 'superadmin' && !hasFullAccess() && (
+                        <span className="text-gray-400">Нет прав</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -469,6 +581,63 @@ export default function UsersManagement() {
             </table>
           </div>
         </div>
+
+        {/* Секция системных операций */}
+        {hasFullAccess() && (
+          <div className="bg-white rounded-lg shadow mt-6">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Системные операции</h3>
+              <p className="text-sm text-gray-500">Опасные операции, доступные только суперадминистраторам</p>
+            </div>
+            <div className="p-6">
+              <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h4 className="text-sm font-medium text-red-800">Очистка пользовательских данных</h4>
+                    <div className="mt-2 text-sm text-red-700">
+                      <p>Эта операция полностью удалит:</p>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        <li>Все данные рейсов из базы данных</li>
+                        <li>Все загруженные файлы</li>
+                        <li>Все email логи</li>
+                      </ul>
+                      <p className="mt-2 font-medium">⚠️ Это действие необратимо!</p>
+                    </div>
+                    <div className="mt-4">
+                      <button
+                        onClick={handleClearUserData}
+                        disabled={isOperationInProgress}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isOperationInProgress ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Очистка...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Очистить все пользовательские данные
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <UserModal
           isOpen={isModalOpen}

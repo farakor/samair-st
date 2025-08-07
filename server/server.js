@@ -1,21 +1,117 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
+const sanitizeHtml = require('sanitize-html');
 const fs = require('fs-extra');
 const path = require('path');
 const cron = require('node-cron');
+const crypto = require('crypto');
 const emailService = require('./services/emailService');
 const fileProcessor = require('./services/fileProcessor');
 const { initDatabase, testConnection, query } = require('./config/database');
 const databaseService = require('./services/databaseService');
+const AuthService = require('./services/authService');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Проверяем наличие обязательных переменных окружения
+const requiredEnvVars = ['JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ Отсутствуют обязательные переменные окружения:', missingEnvVars.join(', '));
+  console.log('💡 Создайте файл .env на основе .env.example');
+  process.exit(1);
+}
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
+
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 минут
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // лимит запросов на IP
+  message: {
+    error: 'Слишком много запросов с этого IP, попробуйте позже.',
+    retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000) / 1000)
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Пропускаем лимит для статических файлов
+    return req.path.startsWith('/static/') || req.path.includes('.');
+  }
+});
+
+// app.use(generalLimiter); // Временно отключено для тестирования
+
+// Body parsing middleware
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb' 
+}));
+
+// Sanitization middleware
+app.use((req, res, next) => {
+  if (req.body) {
+    for (const key in req.body) {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = sanitizeHtml(req.body[key], {
+          allowedTags: [],
+          allowedAttributes: {}
+        });
+      }
+    }
+  }
+  next();
+});
+
+// Request logging
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`${timestamp} ${req.method} ${req.path} - ${req.ip}`);
+  next();
+});
+
+// Auth routes
+app.use('/api/auth', authRoutes);
 
 // Создаем папки для хранения данных
 const dataDir = path.join(__dirname, 'data');
@@ -26,7 +122,7 @@ fs.ensureDirSync(uploadsDir);
 fs.ensureDirSync(configDir);
 
 // API для настройки почты
-app.get('/api/email-config', (req, res) => {
+app.get('/api/email-config', AuthService.authenticateToken, AuthService.requireSuperAdmin, (req, res) => {
   try {
     const configPath = path.join(configDir, 'email.json');
     if (fs.existsSync(configPath)) {
@@ -43,7 +139,7 @@ app.get('/api/email-config', (req, res) => {
   }
 });
 
-app.post('/api/email-config', (req, res) => {
+app.post('/api/email-config', AuthService.authenticateToken, AuthService.requireSuperAdmin, (req, res) => {
   try {
     const config = req.body;
     const configPath = path.join(configDir, 'email.json');
@@ -55,7 +151,7 @@ app.post('/api/email-config', (req, res) => {
 });
 
 // API для тестирования подключения к почте
-app.post('/api/test-email-connection', async (req, res) => {
+app.post('/api/test-email-connection', AuthService.authenticateToken, AuthService.requireSuperAdmin, async (req, res) => {
   try {
     const config = req.body;
     const result = await emailService.testConnection(config);
@@ -66,7 +162,7 @@ app.post('/api/test-email-connection', async (req, res) => {
 });
 
 // API для настройки SMTP
-app.get('/api/smtp-config', (req, res) => {
+app.get('/api/smtp-config', AuthService.authenticateToken, AuthService.requireSuperAdmin, (req, res) => {
   try {
     const configPath = path.join(configDir, 'smtp.json');
     if (fs.existsSync(configPath)) {
@@ -83,7 +179,7 @@ app.get('/api/smtp-config', (req, res) => {
   }
 });
 
-app.post('/api/smtp-config', (req, res) => {
+app.post('/api/smtp-config', AuthService.authenticateToken, AuthService.requireSuperAdmin, (req, res) => {
   try {
     const config = req.body;
     emailService.saveSMTPConfig(config);
@@ -94,7 +190,7 @@ app.post('/api/smtp-config', (req, res) => {
 });
 
 // API для тестирования SMTP подключения
-app.post('/api/test-smtp-connection', async (req, res) => {
+app.post('/api/test-smtp-connection', AuthService.authenticateToken, AuthService.requireSuperAdmin, async (req, res) => {
   try {
     const config = req.body;
     const result = await emailService.testSMTPConnection(config);
@@ -105,7 +201,7 @@ app.post('/api/test-smtp-connection', async (req, res) => {
 });
 
 // API для отправки приветственного письма
-app.post('/api/send-welcome-email', async (req, res) => {
+app.post('/api/send-welcome-email', AuthService.authenticateToken, AuthService.requireSuperAdmin, async (req, res) => {
   try {
     const { userEmail, userName, password } = req.body;
     
@@ -129,12 +225,13 @@ app.get('/api/email-logs', (req, res) => {
     const logsPath = path.join(configDir, 'email-logs.json');
     if (fs.existsSync(logsPath)) {
       const logs = fs.readJsonSync(logsPath);
-      res.json(logs);
+      res.json({ success: true, data: logs });
     } else {
-      res.json([]);
+      res.json({ success: true, data: [] });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при загрузке логов' });
+    console.error('Ошибка при загрузке логов:', error);
+    res.status(500).json({ success: false, error: 'Ошибка при загрузке логов' });
   }
 });
 
@@ -144,18 +241,22 @@ app.get('/api/email-status', (req, res) => {
     const statusPath = path.join(configDir, 'email-status.json');
     if (fs.existsSync(statusPath)) {
       const status = fs.readJsonSync(statusPath);
-      res.json(status);
+      res.json({ success: true, data: status });
     } else {
       res.json({ 
-        isEnabled: false,
-        lastRun: null,
-        nextRun: null,
-        totalEmails: 0,
-        totalFiles: 0
+        success: true,
+        data: {
+          isEnabled: false,
+          lastRun: null,
+          nextRun: null,
+          totalEmails: 0,
+          totalFiles: 0
+        }
       });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при загрузке статуса' });
+    console.error('Ошибка при загрузке статуса:', error);
+    res.status(500).json({ success: false, error: 'Ошибка при загрузке статуса' });
   }
 });
 
@@ -499,7 +600,7 @@ app.delete('/api/files/:fileId', async (req, res) => {
 });
 
 // Очистка всех данных
-app.delete('/api/clear-all', async (req, res) => {
+app.delete('/api/clear-all', AuthService.authenticateToken, AuthService.requireSuperAdmin, async (req, res) => {
   try {
     await databaseService.clearAllData();
     res.json({ success: true });
@@ -602,6 +703,68 @@ app.post('/api/sync-files-to-db', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Ошибка синхронизации файлов:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// API для очистки всех пользовательских данных
+app.post('/api/clear-user-data', AuthService.authenticateToken, AuthService.requireSuperAdmin, async (req, res) => {
+  try {
+    console.log('🧹 Начинаем очистку пользовательских данных...');
+    
+    // Получаем статистику перед удалением
+    let stats = {};
+    try {
+      const flightsCount = await query('SELECT COUNT(*) as count FROM flight_data');
+      const filesCount = await query('SELECT COUNT(*) as count FROM uploaded_files');
+      stats = {
+        flightsBefore: parseInt(flightsCount.rows[0].count),
+        filesBefore: parseInt(filesCount.rows[0].count)
+      };
+    } catch (error) {
+      console.log('⚠️ Не удалось получить статистику перед очисткой');
+      stats = { flightsBefore: 0, filesBefore: 0 };
+    }
+    
+    // Очищаем базу данных
+    await databaseService.clearAllData();
+    
+    // Очищаем папку uploads
+    const uploadsDir = path.join(__dirname, 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      const filesToDelete = files.filter(file => file !== '.DS_Store');
+      
+      for (const file of filesToDelete) {
+        const filePath = path.join(uploadsDir, file);
+        fs.removeSync(filePath);
+      }
+      stats.deletedFiles = filesToDelete.length;
+    } else {
+      stats.deletedFiles = 0;
+    }
+    
+    // Очищаем email логи
+    const emailLogsPath = path.join(configDir, 'email-logs.json');
+    fs.writeJsonSync(emailLogsPath, [], { spaces: 2 });
+    
+    console.log('✅ Очистка пользовательских данных завершена');
+    
+    res.json({
+      success: true,
+      message: 'Все пользовательские данные успешно очищены',
+      data: {
+        clearedFlights: stats.flightsBefore,
+        clearedFileRecords: stats.filesBefore,
+        deletedFiles: stats.deletedFiles,
+        clearedEmailLogs: true
+      }
+    });
+  } catch (error) {
+    console.error('❌ Ошибка очистки пользовательских данных:', error);
     res.status(500).json({
       success: false,
       error: error.message

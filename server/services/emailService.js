@@ -83,13 +83,22 @@ class EmailService {
     }
   }
 
-  // Загрузка HTML шаблона
+  // Загрузка HTML шаблона для приветственного письма
   loadEmailTemplate() {
     const templatePath = path.join(__dirname, '../../email-temp/welcome_user_template.html');
     if (fs.existsSync(templatePath)) {
       return fs.readFileSync(templatePath, 'utf8');
     }
     throw new Error(`HTML шаблон письма не найден по пути: ${templatePath}`);
+  }
+
+  // Загрузка HTML шаблона для сброса пароля
+  loadPasswordResetTemplate() {
+    const templatePath = path.join(__dirname, '../../email-temp/password_reset_template.html');
+    if (fs.existsSync(templatePath)) {
+      return fs.readFileSync(templatePath, 'utf8');
+    }
+    throw new Error(`HTML шаблон сброса пароля не найден по пути: ${templatePath}`);
   }
 
   // Отправка письма с паролем новому пользователю
@@ -150,6 +159,66 @@ class EmailService {
       await this.saveLog({
         type: 'error',
         message: `Ошибка отправки приветственного письма пользователю ${userName} (${userEmail})`,
+        error: error.message
+      });
+
+      throw new Error(`Ошибка отправки письма: ${error.message}`);
+    }
+  }
+
+  // Отправка письма со сброшенным паролем
+  async sendPasswordResetEmail(userEmail, userName, newPassword) {
+    try {
+      const transporter = this.createSMTPTransporter();
+      const smtpConfig = this.loadSMTPConfig();
+
+      // Загружаем HTML шаблон для сброса пароля и заменяем переменные
+      let htmlTemplate = this.loadPasswordResetTemplate();
+      htmlTemplate = htmlTemplate.replace(/{{userName}}/g, userName);
+      htmlTemplate = htmlTemplate.replace(/{{userEmail}}/g, userEmail);
+      htmlTemplate = htmlTemplate.replace(/{{password}}/g, newPassword);
+
+      const mailOptions = {
+        from: `"${smtpConfig.fromName || 'Air Samarkand System'}" <${smtpConfig.user}>`,
+        to: userEmail,
+        subject: 'Пароль сброшен - Air Samarkand',
+        html: htmlTemplate,
+        attachments: [
+          {
+            filename: 'air-samarkand-logo.png',
+            path: path.join(__dirname, '../../email-temp/images/air-samarkand-logo.png'),
+            cid: 'air-samarkand-logo'
+          },
+          {
+            filename: 'vpn_key-48-primary.png',
+            path: path.join(__dirname, '../../email-temp/images/vpn_key-48-primary.png'),
+            cid: 'vpn_key-48-primary'
+          }
+        ]
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      
+      await this.saveLog({
+        type: 'success',
+        message: `Письмо со сброшенным паролем отправлено пользователю ${userName} (${userEmail})`,
+        details: {
+          to: userEmail,
+          messageId: result.messageId
+        }
+      });
+
+      return { 
+        success: true, 
+        message: 'Письмо со сброшенным паролем отправлено успешно',
+        messageId: result.messageId
+      };
+    } catch (error) {
+      console.error('Ошибка отправки письма со сброшенным паролем:', error);
+      
+      await this.saveLog({
+        type: 'error',
+        message: `Ошибка отправки письма со сброшенным паролем пользователю ${userName} (${userEmail})`,
         error: error.message
       });
 

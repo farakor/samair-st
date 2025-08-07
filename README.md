@@ -308,4 +308,4 @@ npm install
 
 ---
 
-**Создано с ❤️ для Samair Airlines** 
+**Создано с ❤️ для Air Samarkand** 

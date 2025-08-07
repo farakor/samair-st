@@ -9,15 +9,15 @@ export default function EmailLogs() {
   const [loading, setLoading] = useState(false);
   const [manualFetchLoading, setManualFetchLoading] = useState(false);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
-  const { canAccessUpload } = useAuth();
+  const { canAccessUpload, apiUtils } = useAuth();
   const { refreshFlightData, refreshFilesList } = useFiles();
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/email-logs');
-      if (response.ok) {
-        const data = await response.json();
+      const result = await apiUtils.get('/email-logs');
+      if (result.success) {
+        const data = result.data;
         setLogs(data);
       }
     } catch (error) {
@@ -25,19 +25,19 @@ export default function EmailLogs() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiUtils]);
 
   const loadStatus = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/email-status');
-      if (response.ok) {
-        const data = await response.json();
+      const result = await apiUtils.get('/email-status');
+      if (result.success) {
+        const data = result.data;
         setStatus(data);
       }
     } catch (error) {
       console.error('Ошибка при загрузке статуса:', error);
     }
-  }, []);
+  }, [apiUtils]);
 
   useEffect(() => {
     if (canAccessUpload()) {
@@ -69,44 +69,35 @@ export default function EmailLogs() {
   const manualFetch = async () => {
     setManualFetchLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/fetch-emails-manual', {
-        method: 'POST',
-      });
+      const result = await apiUtils.post('/fetch-emails-manual');
 
-      if (response.ok) {
-        const result = await response.json();
+      // Показываем результат (обрабатываем новую структуру API)
+      if (result.success) {
+        const { totalFiles, totalEmails } = result.data;
 
-        // Показываем результат (обрабатываем новую структуру API)
-        if (result.success) {
-          const { totalFiles, totalEmails } = result.data;
-
-          if (totalFiles > 0) {
-            // Обновляем данные рейсов и файлов после успешной обработки
-            console.log('🔄 Обновляем данные после обработки писем...');
-            try {
-              await Promise.all([
-                refreshFlightData(),
-                refreshFilesList()
-              ]);
-              console.log('✅ Данные успешно обновлены');
-              alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n🔄 Данные рейсов автоматически обновлены.`);
-            } catch (refreshError) {
-              console.error('❌ Ошибка при обновлении данных:', refreshError);
-              alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n⚠️ Данные обновятся при перезагрузке страницы.`);
-            }
-          } else {
-            alert(`📬 Обработано ${totalEmails} писем, но новых файлов не найдено.`);
+        if (totalFiles > 0) {
+          // Обновляем данные рейсов и файлов после успешной обработки
+          console.log('🔄 Обновляем данные после обработки писем...');
+          try {
+            await Promise.all([
+              refreshFlightData(),
+              refreshFilesList()
+            ]);
+            console.log('✅ Данные успешно обновлены');
+            alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n🔄 Данные рейсов автоматически обновлены.`);
+          } catch (refreshError) {
+            console.error('❌ Ошибка при обновлении данных:', refreshError);
+            alert(`✅ Успешно получено ${totalFiles} файл(ов) из ${totalEmails} писем.\n⚠️ Данные обновятся при перезагрузке страницы.`);
           }
-
-          // Обновляем логи и статус
-          await loadLogs();
-          await loadStatus();
         } else {
-          alert(`❌ Ошибка: ${result.error || 'Неизвестная ошибка'}`);
+          alert(`📬 Обработано ${totalEmails} писем, но новых файлов не найдено.`);
         }
+
+        // Обновляем логи и статус
+        await loadLogs();
+        await loadStatus();
       } else {
-        const error = await response.json();
-        alert(`Ошибка: ${error.error}`);
+        alert(`❌ Ошибка: ${result.error || 'Неизвестная ошибка'}`);
       }
     } catch (error) {
       alert(`Ошибка при получении писем: ${error.message}`);
@@ -118,14 +109,11 @@ export default function EmailLogs() {
   const runDiagnostics = async () => {
     setDiagnosticsLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/database-diagnostics');
+      const result = await apiUtils.get('/database-diagnostics');
 
-      if (response.ok) {
-        const result = await response.json();
-
-        if (result.success) {
-          const { data } = result;
-          const message = `
+      if (result.success) {
+        const { data } = result;
+        const message = `
 📊 Диагностика базы данных:
 
 🔗 Подключение: ${data.database.connected ? '✅ Активно' : '❌ Нет'}
@@ -142,15 +130,11 @@ export default function EmailLogs() {
 
 🎯 Последние файлы: ${data.samples.recentFiles.length}
 🛫 Последние рейсы: ${data.samples.recentFlights.length}
-          `;
+        `;
 
-          alert(message);
-        } else {
-          alert(`Ошибка диагностики: ${result.error}`);
-        }
+        alert(message);
       } else {
-        const error = await response.json();
-        alert(`Ошибка API: ${error.error}`);
+        alert(`Ошибка диагностики: ${result.error}`);
       }
     } catch (error) {
       alert(`Ошибка запроса диагностики: ${error.message}`);
@@ -205,7 +189,7 @@ export default function EmailLogs() {
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">Статус автоматического сбора</h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className={`p-3 rounded-lg ${status.isEnabled ? 'bg-blue-50' : 'bg-red-50'}`}>
                   <p className={`text-sm font-medium ${status.isEnabled ? 'text-blue-600' : 'text-red-600'}`}>Статус</p>
                   <p className={`text-lg font-semibold ${status.isEnabled ? 'text-blue-900' : 'text-red-900'}`}>
@@ -223,11 +207,6 @@ export default function EmailLogs() {
                   <p className="text-lg font-semibold text-green-900">
                     {status.lastRun ? formatDate(status.lastRun) : 'Не запускался'}
                   </p>
-                </div>
-
-                <div className="bg-purple-50 p-3 rounded-lg">
-                  <p className="text-sm text-purple-600 font-medium">Всего писем</p>
-                  <p className="text-lg font-semibold text-purple-900">{status.totalEmails || 0}</p>
                 </div>
 
                 <div className="bg-orange-50 p-3 rounded-lg">
