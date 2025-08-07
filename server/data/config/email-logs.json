@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "type": "success",
+    "message": "Письмо со сброшенным паролем отправлено пользователю Орипов Фаррух (farrukh.oripov@samair.uz)",
+    "details": {
+      "to": "farrukh.oripov@samair.uz",
+      "messageId": "<e56c240d-3059-b1c8-72fd-78acc5d315b2@samair.uz>"
+    },
+    "timestamp": "2025-08-07T12:51:21.344Z"
+  }
+]
